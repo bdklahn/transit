@@ -26,6 +26,7 @@ import platform
 import gzip
 import subprocess
 from collections import defaultdict
+from distutils.spawn import find_executable
 
 def cleanargs(rawargs):
     #TODO: Write docstring
@@ -1064,6 +1065,10 @@ def verify_inputs(vars):
             vars.bwa = bwaexec_win
         else:
             error('cannot find BWA executable. Please include the full executable name as well as its directory.')
+    elif find_executable("bwa") is not None:
+        vars.bwa = "bwa"
+    elif find_executable("bwa.exe") is not None:
+        vars.bwa = "bwa.exe"
     elif not os.path.exists(vars.bwa):
         error('cannot find BWA executable. Please include the full executable name as well as its directory.')
 
