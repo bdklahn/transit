@@ -24,7 +24,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
@@ -270,7 +270,7 @@ class GriffinMethod(base.SingleConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8')))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
 
         self.output.write("#Data: %s\n" % (",".join(self.ctrldata).encode('utf-8'))) 
         self.output.write("#Annotation path: %s\n" % self.annotation_path.encode('utf-8')) 
@@ -290,14 +290,14 @@ class GriffinMethod(base.SingleConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s griffin <comma-separated .wig files> <annotation .prot_table> <output file> [Optional Arguments]
+        return """python3 %s griffin <comma-separated .wig files> <annotation .prot_table> <output file> [Optional Arguments]
 
         Optional Arguments:
         -m <integer>    :=  Smallest read-count to consider. Default: -m 1
         -r <string>     :=  How to handle replicates. Sum or Mean. Default: -r Sum
         -sC             :=  Include stop-codon (default is to ignore).
-        -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-        -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+        -iN <float>     :=  Ignore TAs occuring at given fraction (as integer) of the N terminus. Default: -iN 0
+        -iC <float>     :=  Ignore TAs occuring at given fraction (as integer) of the C terminus. Default: -iC 0
         """ % (sys.argv[0])
 
 
@@ -311,8 +311,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")   
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

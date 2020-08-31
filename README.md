@@ -1,24 +1,31 @@
-# TRANSIT 2.3.2
+# TRANSIT
 
+[![Version](https://img.shields.io/github/tag/mad-lab/transit.svg)](https://github.com/mad-lab/transit)   [![Build Status](https://travis-ci.org/mad-lab/transit.svg?branch=master)](https://travis-ci.org/mad-lab/transit)   [![Documentation Status](https://readthedocs.org/projects/transit/badge/?version=latest)](http://transit.readthedocs.io/en/latest/?badge=latest)   [![Downloads](https://pepy.tech/badge/tnseq-transit)](https://pepy.tech/project/tnseq-transit)
 
-[![Build Status](https://travis-ci.org/mad-lab/transit.svg?branch=master)](https://travis-ci.org/mad-lab/transit)   [![Documentation Status](https://readthedocs.org/projects/transit/badge/?version=latest)](http://transit.readthedocs.io/en/latest/?badge=latest) 
+=======
 
+**NOTE: TRANSIT v3.0+ now requires python3.6+. If you want to use TRANSIT with python2, use version < 3.0.**
 
-Welcome! This is the distribution for the TRANSIT and TPP tools developed by the Ioerger Lab.
+Welcome! This is the distribution for the TRANSIT and TPP tools developed by the [Ioerger Lab](http://orca2.tamu.edu/tom/iLab.html) at Texas A&M University.
 
-TRANSIT is a tool for the analysis of Tn-Seq data. It provides an easy to use graphical interface and access to three different analysis methods that allow the user to determine essentiality in a single condition as well as between conditions.
+TRANSIT is a tool for processing and statistical analysis of Tn-Seq data.
+It provides an easy to use graphical interface and access to three different analysis methods that allow the user to determine essentiality in a single condition as well as between conditions.
+
+TRANSIT Home page: http://saclab.tamu.edu/essentiality/transit/index.html
+
+TRANSIT Documentation: https://transit.readthedocs.io/en/latest/transit_overview.html
 
 [Changelog](https://github.com/mad-lab/transit/blob/master/CHANGELOG.md)
 
 
 ## Features
 TRANSIT offers a variety of features including:
-    
--   More than **8 analysis methods**, including methods for determining **conditional essentiality** as well as **genetic interactions**.
+
+-   More than **10 analysis methods**, including methods for determining **conditional essentiality** as well as **genetic interactions**.
 
 -   Ability to analyze datasets from libraries constructed using  **himar1 or tn5 transposons**.
 
--   **TrackView** to help visualize read-counts accross the genome.
+-   **TrackView** to help visualize read-counts across the genome.
 
 -   Can **export datasets** into a variety of formats, including **IGV**.
 
@@ -42,7 +49,7 @@ For any questions or comments, please contact Dr. Thomas Ioerger, ioerger@cs.tam
 For full instructions on how to install and run TRANSIT (and the optional pre-processor, TPP), please see the documentation included in this distribution ("src/pytransit/doc" folder) or visit the following web page:
 
 
-http://saclab.tamu.edu/essentiality/transit/transit.html
+https://transit.readthedocs.io/en/latest/
 
 
 ## Datasets

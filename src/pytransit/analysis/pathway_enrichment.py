@@ -25,14 +25,11 @@ from scipy.stats import norm
 import datetime
 import operator
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
 import pytransit.stat_tools as stat_tools
-
-
-
 
 import io
 from scipy.stats import hypergeom
@@ -45,497 +42,336 @@ import math
 
 short_name = "pathway_enrichment"
 long_name = "pathway_enrichment"
-short_desc = "Gene set enrichment analysis"
-long_desc = "Gene set enrichment analysis"
+short_desc = "Pathway enrichment analysis"
+long_desc = "Pathway enrichment analysis"
 transposons = [] ##What's this for?
 columns = ["[ID][descr]","Total genes","score","pval","padj","rank of genes"]
 
 ############# Analysis Method ##############
 
-class GSEAAnalysis(base.TransitAnalysis):
-	def __init__(self):		
-		base.TransitAnalysis.__init__(self, short_name, long_name, short_desc, long_desc, transposons, GSEAMethod, GSEAGUI, [GSEAFile])
+class PathwayAnalysis(base.TransitAnalysis):
+  def __init__(self):    
+    base.TransitAnalysis.__init__(self, short_name, long_name, short_desc, long_desc, transposons, PathwayMethod, PathwayGUI, [PathwayFile])
 
 
 ################## FILE ###################
 
-class GSEAFile(base.TransitFile):
+class PathwayFile(base.TransitFile):
 
-	def __init__(self):
-		base.TransitFile.__init__(self, "#Example", columns)
+  def __init__(self):
+    base.TransitFile.__init__(self, "#Example", columns)
 
-	def getHeader(self, path):
-		text = """This is file contains mean counts for each gene. Nzmean is mean accross non-zero sites."""
-		return text
+  def getHeader(self, path):
+    text = """This is file contains analysis of pathways enriched among sigificant genes from resampling."""
+    return text
 
 
 ################# GUI ##################
 
-class GSEAGUI(base.AnalysisGUI):
+# right now, there is no GUI interface for this analysis
 
-	def __init__(self):
-		base.AnalysisGUI.__init__(self)
+class PathwayGUI(base.AnalysisGUI):
+
+  def __init__(self):
+    base.AnalysisGUI.__init__(self)
 
 ########## METHOD #######################
 
-class GSEAMethod(base.SingleConditionMethod):
-	"""   
-	Example
- 
-	"""
-	def __init__(self,
-				resamplingFile,				
-				geneSetFile,
-				output_file,p,N,M):
+class PathwayMethod(base.AnalysisMethod):
 
-		base.SingleConditionMethod.__init__(self, short_name, long_name, short_desc, long_desc, resamplingFile, geneSetFile, output_file, p,N,M)
-		self.resamplingFile=resamplingFile
-		self.geneSetFile = geneSetFile
-		self.output = output_file
-		self.p=p
-		self.N=N
-		self.M=M
+  def __init__(self,resamplingFile,associationsFile,pathwaysFile,outputFile,method,PC=0,N=10000,p=1):
+    base.AnalysisMethod.__init__(self, short_name, long_name, short_desc, long_desc, open(outputFile,"w"), None) # no annotation file
+    self.resamplingFile = resamplingFile
+    self.associationsFile = associationsFile
+    self.pathwaysFile = pathwaysFile
+    self.outputFile = outputFile 
+    # self.output is the opened file, which will be set in base class
+    self.method = method
+    self.PC = PC # for FISHER
+    self.N = N # for GSEA
+    self.p = p # for GSEA
 
-####################################################################################
-	###############FILES################################
-	def loadD(self,fileName):
-		file = open(fileName,"r")
-		dict=[]
-		ORFNameDict={}		
-		for line in file:			
-			if not(line.startswith("#")):				
-				line=line.strip().split("\t") #this will return three elements				
-				ORFNameDict[line[0]]=line[1]
-				dict.append([line[0],float(line[10])])	
-		file.close()
-		return dict,ORFNameDict
+  @classmethod
+  def fromGUI(self, wxobj):
+    pass
 
-		# file = open(fileName,"r")
-		# line = file.readline()
-		# while line.startswith("#"):
-		# 	line = file.readline()		
-		# dict=[]
-		# line = line.split("\t")	
-		# dict.append([line[0],float(line[10])])
-		# ORFNameDict={line[0]:line[1]}
-		# for line in file:		
-		# 	line = line.strip().split("\t")
-		# 	dict.append([line[0],float(line[10])])
-		# 	ORFNameDict[line[0]]=line[1]
-		# return dict,ORFNameDict
+  @classmethod
+  def fromargs(self, rawargs): 
+    (args, kwargs) = transit_tools.cleanargs(rawargs)
+    resamplingFile = args[0]    
+    associations = args[1]
+    pathways = args[2]
+    output = args[3]
+    method = kwargs.get("M", "FISHER")
+    N = int(kwargs.get("N", "10000")) # for GSEA?
+    p = int(kwargs.get("p","1")) # for GSEA?
+    PC = int(kwargs.get("PC","2"))
 
-	def getM(self,protTable):
-		file = open(protTable,"r")
-		return len(file.read().splitlines())
+    if method not in "FISHER GSEA ONT".split(): 
+      print("error: method %s not recognized" % method)
+      print(self.usage_string()); 
+      sys.exit(0)
+    if method=="ONT": print("error: Ontologizer is not implemented yet"); sys.exit(0)
 
-	def loadGoTermsGoTermAsKey(self,fileName):
-		dict={}
-		descr={}
-		file = open(fileName,"r")
-		for f in file:
-			if not(f.startswith("#")):				
-				line = f.strip().split("\t") # It will return the id , description and list of ORFS				
-				if len(line)!=3: 					
-					self.output.write("Format Error in"+fileName+"\n")
-				if not(line[0] in dict):
-					dict[line[0]]=[]					
-				dict[line[0]]+=line[2].split()
-				descr[line[0]] = line[1]
-		return dict,descr
+    return self(resamplingFile,associations,pathways,output,method,PC=PC,N=N,p=p)
 
+  @classmethod
+  def usage_string(self):
+    return """python3 %s pathway_enrichment <resampling_file> <associations> <pathways> <output_file> [-M <FISHER|GSEA|GO>] [-PC <int>]""" % (sys.argv[0])
 
-	def saveInterestingPaths(self,fileName,m,n):
-		inputF = open(fileName,"r")
-		o = fileName.split(".")
-		outputF = open(o[0]+"_"+str(m)+"_"+str(n)+"."+o[1],"w")
-		for line in inputF:
-			cad = line
-			line = line.split(",")[1].split()
-			lenLine = len(line)		
-			if lenLine>m and lenLine<n:
-				outputF.write(cad)
-		outputF.close()
-		
+  def Run(self):
+    self.transit_message("Starting Pathway Enrichment Method")
+    start_time = time.time()
 
-	################PREPROCESSING###################
-	#Keeping only the value with p-value < 0.05
-	#I receives a Dictionary with the gene as key
-	#DEPRECATED!! D only has two columns
-	def filteredPValue(self,D):	
-		return {d:D[d] for d in D if D[d][4]<0.05}
+    # self.output in base class should be open by now
+    self.write("# command: "+' '.join(sys.argv))
+    self.write("# date: "+str(datetime.datetime.now()))
 
-	################STATISTICAL ANALYSIS############
-	#M = the whole Genome
-	#n = hits
-	#N = sample size
-	def hipergeometric(self,k,M,n,N):
-		return hypergeom.sf(k,M,n,N)
+    if self.method=="FISHER": self.fisher_exact_test()
+    elif self.method =="GSEA": self.GSEA()
+    else:
+      method = "Not a valid method"
+      self.progress_update("Not a valid method", 100)
 
+  ############### GSEA ######################
 
-	# HYPERGEOMETRIC
+  def makeindex(self,lst):
+    index = {}
+    for i in range(len(lst)): index[lst[i]] = i
+    return index
+    
+  # based on GSEA paper (Subramanian et al, 2005, PNAS)
+  # xxx assume that Bindex is a dictionary that maps all genes into ranks, and Bscores maps all genes to SLPV
+  # ranks and scores are hashes from genes into ranks and SLPV
+  # when p=0, ES(S) reduces to the standard K-S statistic; p=1 is used in PNAS paper
+    
+  def enrichment_score(self,A,ranks,scores,p=0):
+    n = len(ranks); n2 = int(n/2.0)
+    Aranks = [ranks.get(x,n2) for x in A] # default to middle if not found
+    Ascores = [scores.get(x,0) for x in A] # default to 0 if not found
+    pairs = list(zip(Aranks,Ascores))
+    pairs.sort() # sort A by ranks
+    Aranks,Ascores = [x[0] for x in pairs],[x[1] for x in pairs]
+    powers = [math.pow(abs(x),p) for x in Ascores]
+    NR = sum(powers)
+    if NR==0: return 0 # special case
+    Nmiss = n-len(A) # totalGenes-hits
+    powersum,best = 0,-1
+    for i in range(len(powers)):
+      powersum += powers[i]    
+      Phit = powersum/float(NR)
+      Pmiss = (Aranks[i]-i)/float(Nmiss)
+      es = abs(Phit-Pmiss) # looking for max deviation
+      if es>best: best = es
+    return best
+    
+  def mean_rank(self,A,orfs2ranks): 
+    n2 = len(orfs2ranks.keys())/2
+    return round(numpy.mean([orfs2ranks.get(x,n2) for x in A]),1)
 
-	def hyperGeometricTest(self,dict_k,M,dict_n,N):
-		result={}
-		for key in dict_n:
-			n = len(dict_n[key])
-			I = set(dict_k) & set(dict_n[key])
-			k = len(I)
-			result[key] = {"parameters":str(k)+"\t"+str(n),"p-value": hypergeom.sf(k,M,n,N), "Intersection":I}
-		self.padjustForHypergeom(result)
-		return result
+  # during initialization, self.resamplingFile etc have been set, and self.output has been opened    
+    
+  def GSEA(self):
+    data,hits,headers = self.read_resampling_file(self.resamplingFile) # hits are not used in GSEA()
+    headers = headers[-1].rstrip().split('\t')
+    associations = self.read_associations(self.associationsFile)
+    ontology = self.read_pathways(self.pathwaysFile)
+    genenames = {}
+    for gene in data: genenames[gene[0]] = gene[1]
+    n2 = int(len(data)/2)
+    terms = list(ontology.keys())
+    terms2orfs = associations
+    allgenes = [x[0] for x in data]
 
+    self.write("# method=GSEA, using SLPV to rank genes, Nperm=%d" % self.N)
+    self.write("# total genes: %s, mean rank: %s" % (len(data),n2))
 
-	def padjustForHypergeom(self,result):
-		keys = result.keys()
-		pvalues = [result[k]["p-value"] for k in keys]
-		b,adj=multitest.fdrcorrection(pvalues, alpha=0.05, method='indep')
-		for i in range(len(keys)):
-			result[keys[i]]["padjust"]=adj[i]
+    # rank by SLPV=sign(LFC)*log10(pval)
+    # note: genes with lowest p-val AND negative LFC have highest scores (like positive correlation)
+    # there could be lots of ties with pval=0 or 1, but that's OK
+    LFC_col = headers.index("log2FC")
+    Pval_col = headers.index("p-value")
+    pairs = [] # pair are: rv and score (SLPV)
+    for w in data:
+      orf,LFC,Pval = w[0],float(w[LFC_col]),float(w[Pval_col])
+      SLPV = (-1 if LFC<0 else 1)*math.log(Pval+0.000001,10)
+      pairs.append((orf,SLPV))
+    pairs.sort(key=lambda x: x[1],reverse=True) # emulate ranking genes with *higher* correlation at top
+    orfs2rank,orfs2score = {},{}
+    for i,(orf,score) in enumerate(pairs): 
+      orfs2score[orf] = score
+      orfs2rank[orf] = i
 
+    Nperm = self.N
+    results,Total = [],len(terms)
+    for i,term in enumerate(terms):
+      sys.stdout.flush()
+      orfs = terms2orfs.get(term,[])
+      if len(orfs)<=1: continue
+      mr = self.mean_rank(orfs,orfs2rank)
+      es = self.enrichment_score(orfs,orfs2rank,orfs2score,p=self.p) # always positive, even if negative deviation, since I take abs
+      higher = 0
+      for n in range(Nperm):
+        perm = random.sample(allgenes,len(orfs)) # compare to ES for random sets of genes of same size
+        if self.enrichment_score(perm,orfs2rank,orfs2score,p=self.p)>es: higher += 1
+        if n>100 and higher>10: break # adaptive
+      pval = higher/float(n)
+      vals = ['#',term,len(orfs),mr,es,pval,ontology.get(term,"?")]
+      #sys.stderr.write(' '.join([str(x) for x in vals])+'\n')
+      pctg=(100.0*i)/Total
+      text = "Running Pathway Enrichment Method... %5.1f%%" % (pctg)
+      self.progress_update(text, i)      
+      results.append((term,mr,es,pval))
+    
+    results.sort(key=lambda x: x[1])
+    pvals = [x[-1] for x in results]
+    rej,qvals = multitest.fdrcorrection(pvals)
+    results = [tuple(list(res)+[q]) for res,q in zip(results,qvals)]
 
+    n2 = int(len(data)/2)
+    up,down = 0,0
+    for term,mr,es,pval,qval in results:
+      if qval<0.05:
+        if mr<n2: up += 1
+        else: down += 1
 
-	def saveHyperGeometricTest(self,results,ORFNameDict,DESCR):
-		#GoTermsDescription = loadGoTermsDescriptions("GO_terms_used_in_H37Rv.csv")
-		# f = open(fileNameOut,"w")
-		for k in results:
-			cad = " ".join([x+"/"+ORFNameDict[x] for x in results[k]["Intersection"]])
-			self.output.write(k+"\t"+DESCR[k]+"\t"+results[k]["parameters"]+"\t"+str(results[k]["p-value"])+"\t"+str(results[k]["padjust"])+"\t"+cad+"\n")
+    self.write("# significant pathways enriched for conditionally ESSENTIAL genes: %s (qval<0.05, mean_rank<%s) (includes genes that are MORE required in condition B than A)" % (up,n2))
+    for term,mr,es,pval,qval in results:
+      if qval<0.05 and mr<n2: self.write("#   %s %s (mean_rank=%s)" % (term,ontology.get(term,"?"),mr))
+    self.write("# significant pathways enriched for conditionally NON-ESSENTIAL genes: %s (qval<0.05, mean_rank>%s) (includes genes that are LESS required in condition B than A)" % (down,n2))
+    for term,mr,es,pval,qval in results:
+      if qval<0.05 and mr>n2: self.write("#   %s %s (mean_rank=%s)" % (term,ontology.get(term,"?"),mr))
+    self.write("# pathways sorted by mean_rank")
 
-	# HYPERGEOMETRIC END
+    self.output.write('\t'.join("#pathway description num_genes mean_rank GSEA_score pval qval genes".split())+'\n')
+    for term,mr,es,pval,qval in results:
+      rvs = terms2orfs[term]
+      rvinfo = [(x,genenames.get(x,"?"),orfs2rank.get(x,n2)) for x in rvs]
+      rvinfo.sort(key=lambda x: x[2])
+      rvs = ["%s/%s (%s)" % x for x in rvinfo]
+      rvs = ' '.join(rvs)
+      vals = [term,ontology.get(term,"?"),len(terms2orfs[term]),"%0.1f" % mr]+["%0.6f" % x for x in [es,pval,qval]]+[rvs]
+      self.output.write('\t'.join([str(x) for x in vals])+'\n')
+    self.output.close()
 
-	#D is size N, it is a matrix
-	#D[0]=RvName
-	#D[1]=Correlation with C
-	#S is a array of Genes, It might represent genes of a GoTerm, Pathway, etc
-	def EnrichmentScore(self,D,S,p=1, sort=False):		
-		L = copy.deepcopy(D)		
-		rank = {}	
-		if(sort==True):
-			L = sorted(D,key = lambda x:x[1], reverse=False)	
-		Ldict = {l[0]:l[1] for l in L}
-		N_R=0.0000001
-		N_R += sum([math.pow(abs(Ldict[l]),p) for l in Ldict if l in S]) #add abs according to the formula	
-		lenL = len(L)
-		miss = 1.0/(len(D)-len(S))	
-		P=[[0,0]]
-		ES=[]	
-		#I remove abs from the formula because we're using LFCS as a metric
-		if L[0][0] in S:
-			P[0][0]=math.pow(abs(L[0][1]),p)/N_R
-		else:
-			P[0][1]=miss
-		ESval = P[0][0]-P[0][1]
-		ES.append(ESval)
-		# print L[0][0],",",L[0][1],",",P[0][0],",",P[0][1],",",ESval
-		for i in range(1,lenL):
-			P.append([P[i-1][0],P[i-1][1],0])
-			if L[i][0] in S:
-				P[i][0]+=math.pow(abs(L[i][1]),p)/N_R
-				rank[L[i][0]] = i
-			else:
-				P[i][1]+=miss
-			ESTemp = P[i][0]-P[i][1]
-			ES.append(ESTemp)
-			# print L[i][0],",",L[i][1],",",P[i][0],",",P[i][1],",",ESTemp
-			if ESval<ESTemp:
-				ESval = ESTemp
-		return ESval,N_R,rank
+  #################################
 
-	#This is meant to save some time due to receiving precalculated values.
-	def EnrichmentScoreOpt(self,D,S,miss,N_R,p=1):
-		L = copy.deepcopy(D)	
-		Ldict = {l[0]:l[1] for l in L}	
-		lenL = len(L)	
-		P=[[0,0]]
-		ES=[]
-		#Think about the abs: what is the estimator you're using	
-		if L[0][0] in S:
-			P[0][0]=math.pow(abs(L[0][1]),p)/N_R
-		else:
-			P[0][1]=miss	
-		ESval = P[0][0]-P[0][1]
-		ES.append(ESval)
-		for i in range(1,lenL):
-			P.append([P[i-1][0],P[i-1][1],0])		
-			if L[i][0] in S:
-				P[i][0]+=math.pow(abs(L[i][1]),p)/N_R
-			else:
-				P[i][1]+=miss
-			ESTemp = P[i][0]-P[i][1]
-			ES.append(ESTemp)
-			if ESval<ESTemp:
-				ESval = ESTemp
-		return ESval
+  def read_resampling_file(self,filename):
+    genes,hits,headers = [],[],[]
+    for line in open(filename):
+      if line[0]=='#': headers.append(line); continue
+      w = line.rstrip().split('\t')
+      genes.append(w)
+      qval = float(w[-1])
+      if qval<0.05: hits.append(w[0])
+    return genes,hits,headers
 
-	def shuffleByColumnI(self,D,c):	
-		lD= len(D)	
-		D1 = [D[i][c] for i in range(lD)]
-		random.shuffle(D1)
-		for i in range(lD):
-			D[i][c]=D1[i]
-		return D
+  # assume these are listed as pairs (tab-sep)
+  # return bidirectional hash (genes->[terms], terms->[genes]; each can be one-to-many, hence lists)
+  def read_associations(self,filename):
+    associations = {}
+    for line in open(filename):
+      if line[0]=='#': continue
+      w = line.rstrip().split('\t')
+      # store mappings in both directions
+      for (a,b) in [(w[0],w[1]),(w[1],w[0])]:
+        if a not in associations: associations[a] = []
+        associations[a].append(b)
+    return associations
 
+  def read_pathways(self,filename):
+    pathways = {}
+    for line in open(filename):
+      if line[0]=='#': continue
+      w = line.rstrip().split('\t')
+      pathways[w[0]] = w[1]    
+    return pathways
 
-	def significance(self,D,S,p=1,N=1000):	
-		ES_original=EnrichmentScore(D,S,p)
-		pvalue=0.0
-		for i in range(N):
-			#Shuffle the LFCs
-			D1 = shuffleByColumnI(D,0)		
-			ES=EnrichmentScore(D,S,p)
-			if ES_original<=ES:
-				pvalue+=1.0
-		return ES_original,pvalue/float(N)
+  # HYPERGEOMETRIC 
+  # scipy.stats.hypergeom.sf() is survival function (1-cdf), so only enriched genes will be significant
+  # M = all genes
+  # n = category members overall
+  # N = sample size (resampling hits)
+  # k = number of hits in category (intersection)
 
+  def hypergeometric(self,k,M,n,N):
+    return hypergeom.sf(k,M,n,N)
 
-	def GSEA(self,fileNameForD, fileNameForS, p=1,N=1000):
-		#D is a list of 2XN
-		D = self.loadD(fileNameForD)
-		GoTerms,DESCR = self.loadGoTermsGoTermAsKey(fileNameForS)
-		l=len(GoTerms.keys())
-		Total = float(l*N)	
-		gseaVal={}	
-		for i in range(N):
-			print "Percentage: ",(100.0*l*i)/Total,"%"
-			D1 = self.shuffleByColumnI(D,0)
-			D1 = sorted(D1,key = lambda x:x[1], reverse=False)
-			for goTerm in GoTerms:
-				if(i==0):
-					gseaVal[goTerm]=[EnrichmentScore(D,GoTerms[goTerm]),0.0]
-				ES=self.EnrichmentScore(D1,GoTerms[goTerm],p)
-				if gseaVal[goTerm][0]<=ES:
-					gseaVal[goTerm][1]+=1.0/N
-		return gseaVal,GoTerms
+  def write(self,msg): self.output.write(msg+"\n")
 
+  def fisher_exact_test(self):
+    genes,hits,headers = self.read_resampling_file(self.resamplingFile)
+    associations = self.read_associations(self.associationsFile)
+    pathways = self.read_pathways(self.pathwaysFile)
 
-	def padjust(self,gseaVal):
-		keys = gseaVal.keys()
-		pvals = [gseaVal[k][1] for k in keys]
-		b,adj=multitest.fdrcorrection(pvals, alpha=0.05, method='indep')
-		for i in range(len(keys)):
-			gseaVal[keys[i]][2]=adj[i]
+    # how many genes are there, and how many have associations?
+    # how many genes in associations are not listed in resampling file?
+    # do all associations have a definition in pathways?
+    # how many pathways have >1 gene? (out of total?) what is max?
 
+    genes_with_associations = 0
+    for gene in genes: 
+      orf = gene[0]
+      if orf in associations: genes_with_associations += 1
+    self.write("# method=FISHER, PC=%s" % self.PC)
+    self.write("# genes with associations=%s out of %s total" % (genes_with_associations,len(genes)))
+    self.write("# significant genes (qval<0.05): %s" % (len(hits)))
 
-	def GSEA2(self,fileNameForD, fileNameForS, p=1,N=100):
-		#D is a list of 2XN
-		D,ORFNameDict = self.loadD(fileNameForD)
-		GoTerms,DESCR = self.loadGoTermsGoTermAsKey(fileNameForS)
-		l=len(GoTerms.keys())
-		Total = float(l*N)	
-		gseaVal={}
-		N_R={}
-		miss={}
-		rank={}
-		lenD=len(D)
-		D1 = copy.deepcopy(D)
-		self.progress_range(Total)
-		for goTerm in GoTerms:
-			miss[goTerm] = 1.0/(lenD-len(GoTerms[goTerm]))
-			es,N_R[goTerm],rank[goTerm]=self.EnrichmentScore(D,GoTerms[goTerm],p,sort=True)				
-			gseaVal[goTerm]=[es,0.0,0.0]
-		for i in range(N):
-			# Update Progress 
-			pctg=(100.0*l*i)/Total
-			text = "Running Pathway Enrichment Method... %5.1f%%" % (pctg)
-			self.progress_update(text, l*i)			
-			D1 = self.shuffleByColumnI(D1,0)
-			D1 = sorted(D1,key = lambda x:x[1], reverse=False)		
-			for goTerm in GoTerms:
-				ES=self.EnrichmentScoreOpt(D1,GoTerms[goTerm],miss[goTerm],N_R[goTerm],p)
-				if gseaVal[goTerm][0]<=ES:
-					gseaVal[goTerm][1]+=1.0/N
-		self.padjust(gseaVal)
-		return gseaVal,GoTerms,rank,ORFNameDict,DESCR
+    terms = list(pathways.keys())
+    terms.sort()
+    term_counts = [len(associations.get(term,[])) for term in terms]
+    goodterms = []
+    for term,cnt in zip(terms,term_counts):
+      if cnt>1: goodterms.append(term)
+    self.write("# %s out of %s pathways have >=1 gene; max has %s" % (len(goodterms),len(terms),term_counts[term_counts.index(max(term_counts))]))
 
-	def saveExit(self,GSEADict, PathDict,rank,ORFNameDict,DESCR):		
-		for gsea in GSEADict:
-			# cad=gsea+":\n \t"+" ".join(PathDict[gsea])+"\n\tEnrichment Score: "+str(GSEADict[gsea][0])+" P-value:"+str(GSEADict[gsea][1])+" P-Adjust:"+str(GSEADict[gsea][2])+"\n"			
-			d = rank[gsea]			
-			sorted_d = sorted(d.items(), key=operator.itemgetter(1))
-			rankCad = " ".join([str(k[1])+":"+k[0]+"/"+ORFNameDict[k[0]] for k in sorted_d])
-			# cad="["+"][ ".join(gsea.split("-"))+"],"+str(len(PathDict[gsea]))+","+str(GSEADict[gsea][0])+","+str(GSEADict[gsea][1])+","+str(GSEADict[gsea][2])+","+rankCad+"\n"
+    results = []
+    for term in goodterms:
+      n = len(associations[term]) # number of pathway members overall
+      M = len(genes) # total genes
+      N = len(hits) # number of resampling hits
+      intersection = list(filter(lambda x: x in associations[term],hits))
+      k = len(intersection)
+      # add pseudo-counts
+      PC = self.PC
+      k_PC = int(k+PC)
+      n_PC = n+int(M*PC/float(N)) # add same proportion to overall, round it
+      expected = round((N*n/float(M)),2)
+      enrichment = round((k+PC)/(expected+PC),3)
+      pval = self.hypergeometric(k_PC,M,n_PC,N)
+      results.append([term,M,n,N,k,expected,k_PC,n_PC,enrichment,pval])
 
-			cad=gsea+"\t"+DESCR[gsea]+"\t"+str(len(PathDict[gsea]))+"\t"+str(GSEADict[gsea][0])+"\t"+str(GSEADict[gsea][1])+"\t"+str(GSEADict[gsea][2])+"\t"+rankCad+"\n"
-			self.output.write(cad)
-		self.output.close()
+    pvals = [x[-1] for x in results]
+    rej,qvals = multitest.fdrcorrection(pvals)
+    results = [x+[y] for x,y in zip(results,qvals)]
 
+    genenames = {}
+    for gene in genes: genenames[gene[0]] = gene[1]
 
-#################Z Test#################################
-# D is the whole set with p values <=0.05
-# S is the Sanger Categories with their genes.
-	
-	def Ztest(self,D,S):		
-		auxD = [d[0] for d in D]		
-		DictD={d[0]:d[1] for d in D}
-		ES={}
-		rank={}		
-		for key in S: #GoTerms or Category in S			
-			r=[DictD[k] for k in S[key] if k in DictD]
-			lenr=len(r)
-			if(lenr>1):				
-				meanR = numpy.mean(r)
-				es = math.sqrt(lenr)*meanR
-				ES[key]= [lenr,es,norm.sf(es)]				
-				rank[key]={i: auxD.index(i) for i in S[key] if i in auxD}
-		self.padjustTest(ES)		
-		return ES, rank
+    header = "#pathway total_genes(M) genes_in_path(n) significant_genes(N) signif_genes_in_path(k) expected k+PC n_adj_by_PC enrichement pval qval description genes"
+    self.write('\t'.join(header.split()))
 
-	def ChiSquareTest(self,D,S):		
-		auxD = [d[0] for d in D]
-		DictD={d[0]:d[1] for d in D}
-		ES={}
-		rank={}
+    results.sort(key=lambda x: x[-2]) # pvals
+    for res in results:
+      vals = res
+      term = res[0]
+      vals.append(pathways[term])
+      intersection = list(filter(lambda x: x in associations[term],hits))      
+      intersection = ["%s/%s" % (x,genenames[x]) for x in intersection]
+      vals.append(' '.join(intersection))
+      self.write('\t'.join([str(x) for x in vals]))
 
-		for key in S: #GoTerms or Category in S
-			r=[DictD[k] for k in S[key] if k in DictD]
-			lenr=len(r)
-			if(lenr>19):
-				meanR = numpy.mean(r)			
-				lenSkey = lenr-1
-				es=(sum([(ri-meanR)**2 for ri in r]) - (lenSkey)) / (2*lenSkey)
-				ES[key]= [lenr,es, norm.sf(es)]
-				rank[key]={i: auxD.index(i) for i in S[key] if i in auxD}
-		self.padjustTest(ES)
-		return ES,rank
+    self.transit_message("Adding File: %s" % (self.outputFile))
+    self.add_file(filetype="Pathway Enrichment")
+    self.finish()
+    self.transit_message("Finished Pathway Enrichment Method") 
 
-
-	def printTest(self,test,ORFNameDict,rank,DESCR):		
-		for key in test:
-			cad = " ".join([str(rank[key][g])+":"+g+"/"+ORFNameDict[g] for g in rank[key]])
-			self.output.write(key+"\t"+DESCR[key]+"\t"+str(test[key][0])+"\t"+str(test[key][1])+"\t"+str(test[key][2])+"\t"+str(test[key][3])+"\t"+cad+"\n")
-		self.output.close()	
-
-	def padjustTest(self,test):
-		keys = test.keys()
-		pvals = [test[k][2] for k in keys]
-		b,adj=multitest.fdrcorrection(pvals, alpha=0.05, method='indep')
-		for i in range(len(keys)):
-			test[keys[i]]+=[adj[i]]
-
-	def t_ishEstimators(self,D):
-		lenD = len(D)
-		for i in range(lenD):
-			if D[i][1] == 0:
-				D[i][1]=-4.0
-			elif D[i][1] == 1:
-				D[i][1]=3.0
-			else:
-				D[i][1]=norm.ppf(D[i][1])
-####################################################################################
-	@classmethod
-	def fromGUI(self, wxobj):
-		pass
-
-	@classmethod
-	def fromargs(self, rawargs): 
-		(args, kwargs) = transit_tools.cleanargs(rawargs)
-
-		p=int(kwargs.get("p", 1))
-		N=int(kwargs.get("S", 1000))
-		M = kwargs.get("M", "GSEA")
-		resamplingFile = args[0]		
-		geneSetFile = args[1]
-		outpath = args[2]
-		output = open(outpath, "w") #The outputfile is opened here!!!
-
-		
-		return self(resamplingFile,
-				geneSetFile,
-				output,
-				p,N,M)
-
-	def Run(self):
-		self.transit_message("Starting Pathway Enrichment Method")
-		start_time = time.time()
-
-		if self.M =="GSEA":
-			method = "GSEA"
-			gseaVal,PathDict,rank,ORFNameDict,DESCR=self.GSEA2(self.resamplingFile,self.geneSetFile,self.p,self.N)
-		elif self.M =="HYPE":
-			method = "HYPERGEOMETRIC"
-			D,ORFNameDict = self.loadD(self.resamplingFile)
-			GoTermsWithRV,DESCR = self.loadGoTermsGoTermAsKey(self.geneSetFile)
-			DE = [d[0] for d in D if d[1]<=0.05]
-			S = len(DE) #Sample Size in hyperGeometric	
-			W = len(D) #Whole Genes			
-			# k is the number of genes in DE that are in GoTermsWithRv
-			results=self.hyperGeometricTest(DE,W,GoTermsWithRV,S)
-		elif self.M=="GSEA-Z":
-			method = "GSEA-Z"
-			D,ORFNameDict = self.loadD(self.resamplingFile)
-			GoTermsWithRV,DESCR = self.loadGoTermsGoTermAsKey(self.geneSetFile)
-
-			self.t_ishEstimators(D)
-			results,rank = self.Ztest(D,GoTermsWithRV)
-		elif self.M=="GSEA-CHI":
-			method = "GSEA-CHI"
-			D,ORFNameDict = self.loadD(self.resamplingFile)
-			GoTermsWithRV,DESCR = self.loadGoTermsGoTermAsKey(self.geneSetFile)
-			self.t_ishEstimators(D)
-			results,rank= self.ChiSquareTest(D,GoTermsWithRV)
-		else:
-			method = "Not a valid option"
-			self.progress_update("Not a valid option", 100)
-
-		self.output.write("#Pathway Enrichment\n")
-		if self.wxobj:
-			members = sorted([attr for attr in dir(self) if not callable(getattr(self,attr)) and not attr.startswith("__")])
-			memberstr = ""
-			for m in members:
-				memberstr += "%s = %s, " % (m, getattr(self, m))
-			self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8')))
-		else:
-			self.output.write("#Console: python %s\n" % " ".join(sys.argv))
-
-		self.output.write("#Data: %s\n" % self.resamplingFile) 
-		self.output.write("#Annotation path: %s\n" % self.annotation_path.encode('utf-8')) 
-		self.output.write("#Time: %s\n" % (time.time() - start_time))
-		self.output.write("#Methodology: %s\n"%method)
-		if self.M =="GSEA":
-			columns = ["[ID][descr]","Total genes","score","pval","padj","rank of genes"]
-			self.output.write("#%s\n" % "\t".join(columns))
-			self.saveExit(gseaVal,PathDict,rank,ORFNameDict,DESCR)
-		elif self.M =="HYPE":
-			columns=["cat id descr","Total genes","Total in intersection","pval","padj","genes in intersection"]
-			self.output.write("#%s\n" % "\t".join(columns))
-			self.saveHyperGeometricTest(results,ORFNameDict,DESCR)
-		elif self.M =="GSEA-Z":
-			columns=["#ID-Description","Total Genes","Score","P-Value","P-Adjust","genes"]
-			self.output.write("#%s\n" % "\t".join(columns))
-			self.printTest(results,ORFNameDict,rank,DESCR)
-		elif self.M =="GSEA-CHI":			
-			columns=["#ID-Description","Total Genes","Score","P-Value","P-Adjust","genes"]
-			self.output.write("#%s\n" % "\t".join(columns))
-			self.printTest(results,ORFNameDict,rank,DESCR)
-		self.transit_message("") # Printing empty line to flush stdout 
-		self.transit_message("Adding File: %s" % (self.output.name))
-		self.add_file(filetype="Pathway Enrichment")
-		self.finish()
-		self.transit_message("Finished Pathway Enrichment Method") 
-
-
-	@classmethod
-	def usage_string(self):
-		return """python %s pathway_enrichment <resampling files> <annotation file> <output file> [-p .-S -M < GSEA, HYPE, Z, CHI >] """ % (sys.argv[0])
-
+####################################################
 
 if __name__ == "__main__":
 
-	(args, kwargs) = transit_tools.cleanargs(sys.argv[1:])
-
-	print "ARGS:", args
-	print "KWARGS:", kwargs
-
-	G = GSEAMethod.fromargs(sys.argv[1:])
-
-	print G
-	G.console_message("Printing the member variables:")   
-	G.print_members()
-
-	print ""
-	print "Running:"
-
-	G.Run()
+  app = PathwayMethod.fromargs(sys.argv[1:])
+  app.Run()
 
 
 

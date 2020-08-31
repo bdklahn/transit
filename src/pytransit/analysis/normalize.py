@@ -23,7 +23,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
@@ -54,7 +54,7 @@ class Normalize(base.TransitAnalysis):
 class NormalizeFile(base.TransitFile):
 
     def __init__(self):
-        base.TransitFile.__init__(self, "#CombinedWig", columns) 
+        base.TransitFile.__init__(self, "#CombinedWig", columns)
 
     def getHeader(self, path):
         text = """This is file contains mean counts for each gene. Nzmean is mean accross non-zero sites."""
@@ -72,9 +72,9 @@ class NormalizeGUI(base.AnalysisGUI):
 
 
 class NormalizeMethod(base.SingleConditionMethod):
-    """   
+    """
     Norm
- 
+
     """
     def __init__(self,infile,outfile,normalization):
                 ctrldata=[infile]
@@ -91,16 +91,20 @@ class NormalizeMethod(base.SingleConditionMethod):
 
 
     @classmethod
-    def fromargs(self, rawargs): 
+    def fromargs(self, rawargs):
         (args, kwargs) = transit_tools.cleanargs(rawargs)
 
-        if len(args) < 2:
+        isCombinedWig = 'c' in kwargs
+        if (not isCombinedWig and len(args) < 2) or (isCombinedWig and len(args) < 1):
             raise base.InvalidArgumentException("Must provide all necessary arguments")
-            
-
-        self.infile = args[0] # only 1 input wig file
-        self.outfile = args[1] # if no arg give, could print to screen
+        if isCombinedWig:
+            self.infile = kwargs.get("c") # only 1 input wig file
+            self.outfile = args[0] # if no arg give, could print to screen
+        else:
+            self.infile = args[0] # only 1 input wig file
+            self.outfile = args[1] # if no arg give, could print to screen
         self.normalization = kwargs.get("n", "TTR") # check if it is a legal method name
+        self.combined_wig = isCombinedWig
 
         return self(self.infile,self.outfile,self.normalization)
 
@@ -117,28 +121,37 @@ class NormalizeMethod(base.SingleConditionMethod):
         for line in open(infile):
           if line.startswith("variableStep"): line2 = line.rstrip(); break
 
-        (data, sites) = tnseq_tools.get_data(self.ctrldata)
+        if self.combined_wig==True: (sites,data,files) = tnseq_tools.read_combined_wig(self.ctrldata[0])
+        else: (data, sites) = tnseq_tools.get_data(self.ctrldata)
         (data,factors) = norm_tools.normalize_data(data,self.normalization)
 
-        print "writing",outputPath
+        print("writing",outputPath)
         file = open(outputPath,"w")
         file.write("# %s normalization of %s\n" % (self.normalization,infile))
-        file.write(line2+"\n")
-        for j in range(len(sites)):
-          file.write("%s %s\n" % (sites[j],int(data[0,j])))
+        if self.combined_wig==True:
+          for f in files: file.write("#File: %s\n" % f)
+          for i in range(len(sites)): file.write('\t'.join([str(sites[i])]+["%0.1f" % x for x in list(data[...,i])])+"\n")
+        else:
+          file.write(line2+"\n")
+          for j in range(len(sites)):
+            file.write("%s %s\n" % (sites[j],int(data[0,j])))
         file.close()
 
         self.finish()
-        self.transit_message("Finished Normalization") 
+        self.transit_message("Finished Normalization")
 
     @classmethod
     def usage_string(self):
         return """
-python %s normalize <input.wig> <output.wig> [-n TTR|betageom]
-    
+python3 %s normalize <input.wig> <output.wig> [-n TTR|betageom]
+---
+OR
+---
+python3 %s normalize -c <input combined_wig> <output.wig> [-n TTR|betageom]
+
         Optional Arguments:
         -n <string>     :=  Normalization method. Default: -n TTR
-        """ % (sys.argv[0])
+        """ % (sys.argv[0], sys.argv[0])
 
 
 

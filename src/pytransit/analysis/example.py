@@ -23,7 +23,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
@@ -209,7 +209,7 @@ class ExampleMethod(base.SingleConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8')))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
 
         self.output.write("#Data: %s\n" % (",".join(self.ctrldata).encode('utf-8'))) 
         self.output.write("#Annotation path: %s\n" % self.annotation_path.encode('utf-8')) 
@@ -229,24 +229,24 @@ class ExampleMethod(base.SingleConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s example <comma-separated .wig files> <annotation .prot_table> <output file>""" % (sys.argv[0])
+        return """python3 %s example <comma-separated .wig files> <annotation .prot_table> <output file>""" % (sys.argv[0])
 
 
 if __name__ == "__main__":
 
     (args, kwargs) = transit_tools.cleanargs(sys.argv[1:])
 
-    print "ARGS:", args
-    print "KWARGS:", kwargs
+    print("ARGS:", args)
+    print("KWARGS:", kwargs)
 
     G = Example.fromargs(sys.argv[1:])
 
-    print G
+    print(G)
     G.console_message("Printing the member variables:")   
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

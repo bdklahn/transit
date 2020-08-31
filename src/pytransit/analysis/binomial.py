@@ -22,7 +22,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
@@ -346,7 +346,7 @@ class BinomialMethod(base.SingleConditionMethod):
             elif K[g]/float(N[g]) == 1: theta[g][0] = 0.001
             else: theta[g][0] = K[g]/float(N[g])
 
-            #print g, ORF[g], K[g], N[g], theta[g][0]
+            #print(g, ORF[g], K[g], N[g], theta[g][0])
             Z[g][0] = scipy.stats.bernoulli.rvs(1-theta[g][0])
 
 
@@ -439,9 +439,9 @@ class BinomialMethod(base.SingleConditionMethod):
                 Z[:,i] = scipy.stats.bernoulli.rvs(p1)
             except:
                 inan = numpy.isnan(p1)
-                print >> sys.stderr, "K=\t", K[inan]
-                print >> sys.stderr, "N=\t", N[inan]
-                print >> sys.stderr, "theta=", theta[inan,i]
+                sys.stderr.write("K=\t", K[inan],"\n")
+                sys.stderr.write("N=\t", N[inan],"\n")
+                sys.stderr.write("theta=", theta[inan,i],'\n')
                 sys.exit()
             pz1[i] = p1[0]
 
@@ -472,7 +472,7 @@ class BinomialMethod(base.SingleConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s, samples=%s, burnin=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8'), self.samples, self.burnin))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
 
         self.output.write("#Thresholds: (%1.5f, %1.5f)\n" % (ess_threshold,noness_threshold))
         self.output.write("#rho0 Acceptance Rate:\t%f%%\n" % ((100.0*acc_p0)/sample_size))
@@ -511,13 +511,13 @@ class BinomialMethod(base.SingleConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s binomial <comma-separated .wig files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+        return """python3 %s binomial <comma-separated .wig files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
 
         Optional Arguments:
             -s <int>        :=  Number of samples to take. Default: -s 10000
             -b <int>        :=  Number of burn-in samples to take. Default: -b 500
-            -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-            -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+            -iN <float>     :=  Ignore TAs occuring at given percentage (as integer) of the N terminus. Default: -iN 0
+            -iC <float>     :=  Ignore TAs occuring at given percentage (as integer) of the C terminus. Default: -iC 0
 
             Hyper-parameters:
             -pi0 <float>     :=  Hyper-parameters for rho, non-essential genes. Default: -pi0 0.5
@@ -546,8 +546,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")   
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

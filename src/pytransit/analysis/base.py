@@ -18,6 +18,7 @@ if hasWx:
 
 import traceback
 import datetime
+import numpy
 import pytransit.transit_tools as transit_tools
 
 file_prefix = "[FileDisplay]"
@@ -123,8 +124,8 @@ class TransitFile (TransitGUIBase):
             if line.startswith("#"): continue
             tmp = line.split("\t")
             tmp[-1] = tmp[-1].strip()
-            #print colnames
-            #print  len(colnames), len(tmp)
+            #print(colnames)
+            #print( len(colnames), len(tmp))
             try:
                 rowdict = dict([(colnames[i], tmp[i]) for i in range(len(colnames))])
             except Exception as e:
@@ -152,15 +153,15 @@ class TransitFile (TransitGUIBase):
 
     def displayInTrackView(self, displayFrame, event):
 
-        #print "Self:", self
-        #print "Frame:", displayFrame
-        #print "Event:", event
-        #print "Frame parent:", displayFrame.parent
+        #print("Self:", self)
+        #print("Frame:", displayFrame)
+        #print("Event:", event)
+        #print("Frame parent:", displayFrame.parent)
         try:
             gene = displayFrame.grid.GetCellValue(displayFrame.row, 0)
             displayFrame.parent.allViewFunc(displayFrame, gene)
         except Exception as e:
-            print file_prefix, "Error occurred: %s" % e
+            print(file_prefix, "Error occurred: %s" % e)
 
 #
 
@@ -317,23 +318,23 @@ class AnalysisMethod:
         try:
             return self.fromargs(sys.argv[2:])
         except InvalidArgumentException as e:
-            print "Error: %s" % str(e)
-            print self.usage_string()
+            print("Error: %s" % str(e))
+            print(self.usage_string())
         except IndexError as e:
-            print "Error: %s" % str(e)
-            print self.usage_string()
+            print("Error: %s" % str(e))
+            print(self.usage_string())
         except TypeError as e:
-            print "Error: %s" % str(e)
+            print("Error: %s" % str(e))
             traceback.print_exc()
-            print self.usage_string()
+            print(self.usage_string())
         except ValueError as e:
-            print "Error: %s" % str(e)
+            print("Error: %s" % str(e))
             traceback.print_exc()
-            print self.usage_string()
+            print(self.usage_string())
         except Exception as e:
-            print "Error: %s" % str(e)
+            print("Error: %s" % str(e))
             traceback.print_exc()
-            print self.usage_string()
+            print(self.usage_string())
         sys.exit()
 
 #
@@ -355,7 +356,7 @@ class AnalysisMethod:
         #TODO: write docstring
         members = sorted([attr for attr in dir(self) if not callable(getattr(self,attr)) and not attr.startswith("__")])
         for m in members:
-            print "%s = %s" % (m, getattr(self, m))
+            print("%s = %s" % (m, getattr(self, m)))
 
 #
 
@@ -508,14 +509,92 @@ class MultiConditionMethod(AnalysisMethod):
     Class to be inherited by analysis methods that compare essentiality between multiple conditions (e.g Anova).
     '''
 
-    def __init__(self, short_name, long_name, short_desc, long_desc, combined_wig, metadata, annotation_path, output, normalization=None, LOESS=False, ignoreCodon=True, wxobj=None):
+    def __init__(self, short_name, long_name, short_desc, long_desc, combined_wig, metadata, annotation_path, output, normalization=None, LOESS=False, ignoreCodon=True, wxobj=None, ignored_conditions=[], included_conditions=[], nterm=0.0, cterm=0.0):
         AnalysisMethod.__init__(self, short_name, long_name, short_desc, long_desc, output,
                 annotation_path, wxobj)
         self.combined_wig = combined_wig
         self.metadata = metadata
         self.normalization = normalization
-        self.LOESS = LOESS
-        self.ignoreCodon = ignoreCodon
+        self.NTerminus = nterm
+        self.CTerminus = cterm
+        self.unknown_cond_flag = "FLAG-UNMAPPED-CONDITION-IN-WIG"
+        self.ignored_conditions = ignored_conditions
+        self.included_conditions = included_conditions
+
+    def filter_wigs_by_conditions(self, data, conditions, covariates = [], interactions = [], ignored_conditions = [], included_conditions = []):
+        """
+            Filters conditions that are ignored/included.
+            ([[Wigdata]], [Condition], [[Covar]], [Condition], [Condition]) -> Tuple([[Wigdata]], [Condition])
+        """
+        ignored_conditions, included_conditions = (set(ignored_conditions), set(included_conditions))
+        d_filtered, cond_filtered, filtered_indexes = [], [], [];
+
+        if len(ignored_conditions) > 0 and len(included_conditions) > 0:
+            self.transit_error("Both ignored and included conditions have len > 0")
+            sys.exit(0)
+        elif (len(ignored_conditions) > 0):
+            self.transit_message("conditions ignored: {0}".format(ignored_conditions))
+            for i, c in enumerate(conditions):
+              if (c != self.unknown_cond_flag) and (c not in ignored_conditions):
+                d_filtered.append(data[i])
+                cond_filtered.append(conditions[i])
+                filtered_indexes.append(i)
+        elif (len(included_conditions) > 0):
+            self.transit_message("conditions included: {0}".format(included_conditions))
+            for i, c in enumerate(conditions):
+              if (c != self.unknown_cond_flag) and (c in included_conditions):
+                d_filtered.append(data[i])
+                cond_filtered.append(conditions[i])
+                filtered_indexes.append(i)
+        else:
+            for i, c in enumerate(conditions):
+              if (c != self.unknown_cond_flag):
+                d_filtered.append(data[i])
+                cond_filtered.append(conditions[i])
+                filtered_indexes.append(i)
+
+        covariates_filtered = [[c[i] for i in filtered_indexes] for c in covariates]
+        interactions_filtered = [[c[i] for i in filtered_indexes] for c in interactions]
+
+
+        return (numpy.array(d_filtered),
+                numpy.array(cond_filtered),
+                numpy.array(covariates_filtered),
+                numpy.array(interactions_filtered))
+
+    # input: conditions are per wig; orderingMetdata comes from tnseq_tools.read_samples_metadata()
+    # output: conditionsList is selected subset of conditions (unique, in preferred order)
+
+    def select_conditions(self,conditions,included_conditions,ignored_conditions,orderingMetadata): 
+        if len(included_conditions)>0: conditionsList = included_conditions
+        else:
+          conditionsList = []
+          for c in orderingMetadata['condition']: # the order conds appear in metadata file, duplicated for each sample
+            if c not in conditionsList: conditionsList.append(c)
+        for c in ignored_conditions:  
+          if c in conditionsList: conditionsList.remove(c)
+        return conditionsList
+
+    def filter_wigs_by_conditions2(self, data, conditions, conditionsList, covariates = [], interactions = []):
+        """
+            Filters conditions that are ignored/included.
+            ([[Wigdata]], [Condition], [[Covar]], [Condition], [Condition]) -> Tuple([[Wigdata]], [Condition])
+        """
+        d_filtered, cond_filtered, filtered_indexes = [], [], [];
+
+        for i, c in enumerate(conditions):
+          if (c != self.unknown_cond_flag) and (c in conditionsList):
+            d_filtered.append(data[i])
+            cond_filtered.append(conditions[i])
+            filtered_indexes.append(i)
+
+        covariates_filtered = [[c[i] for i in filtered_indexes] for c in covariates]
+        interactions_filtered = [[c[i] for i in filtered_indexes] for c in interactions]
+
+        return (numpy.array(d_filtered),
+                numpy.array(cond_filtered),
+                numpy.array(covariates_filtered),
+                numpy.array(interactions_filtered))
 
 #
 

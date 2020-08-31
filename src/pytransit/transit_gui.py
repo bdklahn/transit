@@ -2,6 +2,7 @@
 
 
 import sys
+from collections import defaultdict
 
 try:
     import wx
@@ -25,19 +26,6 @@ import threading
 import numpy
 import matplotlib
 
-# Check backends and use the first interactive one
-interactive_backends = [i for i in matplotlib.rcsetup.interactive_bk]
-goodBackend = False
-for backend in interactive_backends:
-    if goodBackend: break
-    try:
-        matplotlib.use(backend,warn=False, force=True)
-        from matplotlib import pyplot as plt
-        goodBackend = True
-    except:
-        goodBackend = False
-
-
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import math
@@ -50,6 +38,7 @@ import traceback
 import pytransit
 import pytransit.analysis
 import pytransit.export
+import pytransit.convert
 import pytransit.trash as trash
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
@@ -64,6 +53,7 @@ import pytransit.images as images
 method_wrap_width = 250
 methods = pytransit.analysis.methods
 export_methods = pytransit.export.methods
+convert_methods = pytransit.convert.methods
 normmethods = norm_tools.methods
 
 
@@ -113,21 +103,32 @@ class MainFrame ( wx.Frame ):
 
         bSizer4 = wx.BoxSizer( wx.VERTICAL )
 
-        # ANNOTATION
         orgSizer = wx.StaticBoxSizer( wx.StaticBox( self.mainWindow, wx.ID_ANY, u"Organism" ), wx.VERTICAL )
 
-        bSizer10 = wx.BoxSizer( wx.HORIZONTAL )
+        # ANNOTATION
+        annot_sizer = wx.BoxSizer( wx.HORIZONTAL )
+        label_annot = wx.StaticText( self.mainWindow, wx.ID_ANY, u"Annotation File:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        annot_sizer.Add(label_annot,0,wx.ALIGN_CENTER_VERTICAL,0)
+        self.annotationFilePicker = wx.FilePickerCtrl(self.mainWindow, id=wx.ID_ANY, size=(400,30), wildcard=u"prot_table or GFF3 files (*.gff3;*.gff;*.prot_table;*.txt)|*.gff3;*.gff;*.prot_table;*.txt", message = "Select Annotation file (.prot_table or .gff3)", style=wx.FLP_DEFAULT_STYLE|wx.FLP_USE_TEXTCTRL|wx.FD_MULTIPLE)
+        self.annotationFilePicker.SetInitialDirectory(os.getcwd())
+        annot_sizer.Add(self.annotationFilePicker, proportion=1, flag=wx.EXPAND|wx.ALL, border=5)
 
-        self.m_staticText5 = wx.StaticText( self.mainWindow, wx.ID_ANY, u"Annotation File:", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.m_staticText5.Wrap( -1 )
-        bSizer10.Add( self.m_staticText5, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+        orgSizer.Add( annot_sizer, 1, wx.EXPAND, 5 )
+
+        # ANNOTATION
+
+        # bSizer10 = wx.BoxSizer( wx.HORIZONTAL )
+
+        # self.m_staticText5 = wx.StaticText( self.mainWindow, wx.ID_ANY, u"Annotation File:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        # self.m_staticText5.Wrap( -1 )
+        # bSizer10.Add( self.m_staticText5, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 
 
-        self.annotationFilePicker = GenBitmapTextButton(self.mainWindow, 1, bmp, '[Click to add Annotation File (.prot_table or .gff3)]', size= wx.Size(500, -1))
+        # self.annotationFilePicker = GenBitmapTextButton(self.mainWindow, 1, bmp, '[Click to add Annotation File (.prot_table or .gff3)]', size= wx.Size(500, -1))
 
-        bSizer10.Add( self.annotationFilePicker, 1, wx.ALIGN_CENTER_VERTICAL, 5 )
+        # bSizer10.Add( self.annotationFilePicker, 1, wx.ALIGN_CENTER_VERTICAL, 5 )
 
-        orgSizer.Add( bSizer10, 1, wx.EXPAND, 5 )
+        # orgSizer.Add( bSizer10, 1, wx.EXPAND, 5 )
 
         bSizer4.Add( orgSizer, 0, wx.EXPAND, 5 )
 
@@ -252,7 +253,7 @@ class MainFrame ( wx.Frame ):
         self.logoImg = wx.StaticBitmap( self.optionsWindow, wx.ID_ANY, wx.NullBitmap, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.optionsSizer.Add( self.logoImg, 0, wx.ALL|wx.ALIGN_CENTER, 5 )
 
-        self.versionLabel = wx.StaticText( self.optionsWindow, wx.ID_ANY, u"", wx.DefaultPosition, wx.DefaultSize, wx.ALIGN_CENTRE )
+        self.versionLabel = wx.StaticText( self.optionsWindow, wx.ID_ANY, u"", wx.DefaultPosition,(100,25), wx.ALIGN_CENTRE )
         self.versionLabel.Wrap( -1 )
         self.versionLabel.SetFont( wx.Font( 10, 74, 90, 92, False, "Sans" ) )
 
@@ -430,8 +431,8 @@ class MainFrame ( wx.Frame ):
 
         self.convertMenuItem.Append( self.annotationConvertPTTToPT )
 
-        self.annotationConvertGFF3ToPT = wx.MenuItem( self.convertMenuItem, wx.ID_ANY, u"GFF3 to prot_table", wx.EmptyString, wx.ITEM_NORMAL )
-        self.convertMenuItem.Append( self.annotationConvertGFF3ToPT )
+        # self.annotationConvertGFF3ToPT = wx.MenuItem( self.convertMenuItem, wx.ID_ANY, u"GFF3 to prot_table", wx.EmptyString, wx.ITEM_NORMAL )
+        # self.convertMenuItem.Append( self.annotationConvertGFF3ToPT )
         self.fileMenuItem.AppendSubMenu( self.convertMenuItem, u"Convert" )
 
         self.fileExitMenuItem = wx.MenuItem( self.fileMenuItem, wx.ID_ANY, u"&Exit", wx.EmptyString, wx.ITEM_NORMAL )
@@ -483,7 +484,7 @@ class MainFrame ( wx.Frame ):
 
         # Connect Events
 
-        self.annotationFilePicker.Bind( wx.EVT_BUTTON, self.annotationFileFunc )
+        self.annotationFilePicker.Bind( wx.EVT_FILEPICKER_CHANGED, self.annotationFileFunc )
         self.ctrlRemoveButton.Bind( wx.EVT_BUTTON, self.ctrlRemoveFunc )
         self.ctrlView.Bind( wx.EVT_BUTTON, self.allViewFunc )
         self.ctrlScatter.Bind( wx.EVT_BUTTON, self.scatterFunc )
@@ -501,7 +502,7 @@ class MainFrame ( wx.Frame ):
         self.Bind( wx.EVT_MENU, self.annotationPT_to_PTT, id = self.annotationConvertPTToPTTMenu.GetId() )
         self.Bind( wx.EVT_MENU, self.annotationPT_to_GFF3, id = self.annotationConvertPTToGFF3Menu.GetId() )
         self.Bind( wx.EVT_MENU, self.annotationPTT_to_PT, id = self.annotationConvertPTTToPT.GetId() )
-        self.Bind( wx.EVT_MENU, self.annotationGFF3_to_PT, id = self.annotationConvertGFF3ToPT.GetId() )
+        # self.Bind( wx.EVT_MENU, self.annotationGFF3_to_PT, id = self.annotationConvertGFF3ToPT.GetId() )
         self.Bind( wx.EVT_MENU, self.Exit, id = self.fileExitMenuItem.GetId() )
         self.Bind( wx.EVT_MENU, self.scatterFunc, id = self.scatterMenuItem.GetId() )
         self.Bind( wx.EVT_MENU, self.allViewFunc, id = self.trackMenuItem.GetId() )
@@ -649,8 +650,8 @@ class TnSeekFrame(MainFrame):
         self.annotation = ""
         self.transposons = ["himar1", "tn5"]
         #import pkgutil
-        #print [x for x in pkgutil.iter_modules(['transit/analysis'])]
-        #print gumbel.Gumbel.__bases__
+        #print([x for x in pkgutil.iter_modules(['transit/analysis'])])
+        #print(gumbel.Gumbel.__bases__)
 
         self.logoImg.SetBitmap(images.transit_logo2.GetImage().ConvertToBitmap())
         self.versionLabel.SetLabel(pytransit.__version__)
@@ -705,13 +706,25 @@ class TnSeekFrame(MainFrame):
             self.Bind( wx.EVT_MENU, partial(self.ExportSelectFunc,  export_methods[name].label),
                 tempMenuItem )
 
+        # Convert Menu Items
+        for name in convert_methods:
+            convert_methods[name].gui.defineMenuItem(self, convert_methods[name].label)
+            tempMenuItem = convert_methods[name].gui.menuitem
+            self.convertMenuItem.Append( tempMenuItem )
 
+            self.Bind( wx.EVT_MENU, partial(self.ConvertSelectFunc,  convert_methods[name].label),
+                tempMenuItem )
 
 
         # Method Panels
 
         methodChoiceChoices = [ "[Choose Method]"]
-        for name in methods:
+        methodorder = [("gumbel", 1), ("resampling", 2), ("hmm", 3)]
+        order = defaultdict(lambda: 100)
+        for k, v in methodorder:
+            order[k] = v
+
+        for name in sorted(methods.keys(), key=lambda x: order[x]):
             methods[name].gui.definePanel(self)
             #methods[name].gui.panel.BackgroundColour = (0, 200, 20)
             self.methodSizer.Add(methods[name].gui.panel, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
@@ -768,7 +781,7 @@ class TnSeekFrame(MainFrame):
                     transit_tools.transit_message("Adding Ctrl File: " + path)
                     self.loadCtrlFile(path)
                 except Exception as e:
-                    print "Error:", str(e)
+                    print("Error:", str(e))
 
             expData = ["cholesterol_H37Rv_rep1.wig", "cholesterol_H37Rv_rep2.wig", "cholesterol_H37Rv_rep3.wig"]
             for dataset in expData:
@@ -777,14 +790,13 @@ class TnSeekFrame(MainFrame):
                     transit_tools.transit_message("Adding Exp File: " + path)
                     self.loadExpFile(path)
                 except Exception as e:
-                    print "Error:", str(e)
+                    print("Error:", str(e))
 
             try:
                 self.annotation = os.path.join(os.path.dirname('/pacific/home/mdejesus/transit/src/transit.py'), "pytransit/genomes/H37Rv.prot_table")
-                self.annotationFilePicker.SetLabel(transit_tools.basename(self.annotation))
                 transit_tools.transit_message("Annotation File Selected: %s" % self.annotation)
             except Exception as e:
-                print "Error:", str(e)
+                print("Error:", str(e))
 
 #
 
@@ -1168,9 +1180,9 @@ class TnSeekFrame(MainFrame):
                 )
             if dlg.ShowModal() == wx.ID_OK:
                 paths = dlg.GetPaths()
-                print "You chose the following Control file(s):"
+                print("You chose the following Control file(s):")
                 for fullpath in paths:
-                    print "\t%s" % fullpath
+                    print("\t%s" % fullpath)
                     self.loadCtrlFile(fullpath)
             dlg.Destroy()
         except Exception as e:
@@ -1195,14 +1207,14 @@ class TnSeekFrame(MainFrame):
                 )
             if dlg.ShowModal() == wx.ID_OK:
                 paths = dlg.GetPaths()
-                print "You chose the following Experimental file(s):"
+                print("You chose the following Experimental file(s):")
                 for fullpath in paths:
-                    print "\t%s" % fullpath
+                    print("\t%s" % fullpath)
                     self.loadExpFile(fullpath)
             dlg.Destroy()
         except Exception as e:
             transit_tools.transit_message("Error: %s" % e)
-            print "PATH", fullpath
+            print("PATH", fullpath)
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)
@@ -1415,17 +1427,19 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
             traceback.print_exc()
 
 #
-
     def annotationFileFunc(self, event):
+        self.annotation=event.GetPath()
 
-        wc = u"Known Annotation Formats (*.prot_table,*.gff3,*.gff)|*.prot_table;*.gff3;*.gff;|\nProt Table (*.prot_table)|*.prot_table;|\nGFF3 (*.gff,*.gff3)|*.gff;*.gff3;|\nAll files (*.*)|*.*"
-        self.annotation = self.OpenFile(DIR=self.workdir, FILE="", WC=wc)
-        if self.annotation:
-            self.annotationFilePicker.SetLabel(transit_tools.basename(self.annotation))
-            if self.verbose:
-                transit_tools.transit_message("Annotation File Selected: %s" % self.annotation)
-        else:
-            self.annotationFilePicker.SetLabel("[Click to add Annotation File (.prot_table or .gff3)]")
+    # def annotationFileFunc(self, event):
+
+    #     wc = u"Known Annotation Formats (*.prot_table,*.gff3,*.gff)|*.prot_table;*.gff3;*.gff;|\nProt Table (*.prot_table)|*.prot_table;|\nGFF3 (*.gff,*.gff3)|*.gff;*.gff3;|\nAll files (*.*)|*.*"
+    #     self.annotation = self.OpenFile(DIR=self.workdir, FILE="", WC=wc)
+    #     if self.annotation:
+    #         self.annotationFilePicker.SetLabel(transit_tools.basename(self.annotation))
+    #         if self.verbose:
+    #             transit_tools.transit_message("Annotation File Selected: %s" % self.annotation)
+    #     else:
+    #         self.annotationFilePicker.SetLabel("[Click to add Annotation File (.prot_table or .gff3)]")
 
 #
     def MethodSelectFunc(self, selected_name, test=""):
@@ -1504,6 +1518,21 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
                     transit_tools.transit_message("Error: %s" % str(e))
                     traceback.print_exc()
 
+    def ConvertSelectFunc(self, selected_name, test=""):
+        annotationpath = self.annotation
+
+        for name in convert_methods:
+            if convert_methods[name].label == selected_name:
+                methodobj = convert_methods[name].method
+                try:
+                    M = methodobj.fromGUI(self)
+                    if M:
+                        thread = threading.Thread(target=M.Run())
+                        thread.setDaemon(True)
+                        thread.start()
+                except Exception as e:
+                    transit_tools.transit_message("Error: %s" % str(e))
+                    traceback.print_exc()
 #
 
     def displayFileFunc(self, event):
@@ -1686,7 +1715,7 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
                transit_tools.ShowError(MSG="Need to select a 'Resampling' results file for this type of plot.")
 
         except Exception as e:
-            print "Error occurred creating plot:", str(e)
+            print("Error occurred creating plot:", str(e))
 
 #
 
@@ -1713,7 +1742,7 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
             plt.show()
 
         except Exception as e:
-            print "Error occurred creating plot:", str(e)
+            print("Error occurred creating plot:", str(e))
 
 #
 
@@ -1728,7 +1757,7 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
         window = 100
         for j in range(K):
 
-            size = len(position)/window + 1
+            size = int(len(position)/window) + 1 # python3 requires explicit rounding to int
             x_w = numpy.zeros(size)
             y_w = numpy.zeros(size)
             for i in range(size):
@@ -1738,7 +1767,7 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
             y_smooth = stat_tools.loess(x_w, y_w, h=10000)
             plt.plot(x_w, y_w, "g+")
             plt.plot(x_w, y_smooth, "b-")
-            plt.xlabel("Genomic Position")
+            plt.xlabel("Genomic Position (TA sites)")
             plt.ylabel("Reads per 100 insertion sites")
 
             plt.title("LOESS Fit - %s" % transit_tools.basename(datasets_selected[j]) )
@@ -1758,9 +1787,9 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
                 )
             if dlg.ShowModal() == wx.ID_OK:
                 paths = dlg.GetPaths()
-                print "You chose the following Results file(s):"
+                print("You chose the following Results file(s):")
                 for fullpath in paths:
-                    print "\t%s" % fullpath
+                    print("\t%s" % fullpath)
                     name = transit_tools.basename(fullpath)
                     line = open(fullpath).readline()
                     if line.startswith("#Gumbel"):
@@ -1786,7 +1815,7 @@ along with TRANSIT.  If not, see <http://www.gnu.org/licenses/>.
             dlg.Destroy()
         except Exception as e:
             transit_tools.transit_message("Error: %s" %  e)
-            print "PATH", fullpath
+            print("PATH", fullpath)
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)

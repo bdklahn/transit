@@ -6,10 +6,13 @@ https://github.com/pypa/sampleproject
 """
 
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
 # To use a consistent encoding
 from codecs import open
 from os import path
+from shutil import rmtree
+
+import os
 
 here = path.abspath(path.dirname(__file__))
 
@@ -22,7 +25,71 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 import sys
 sys.path.insert(1, "src/")
 import pytransit
-version =  pytransit.__version__[1:] #"2.0.3"
+version =  pytransit.__version__[1:]
+
+class UploadCommand(Command):
+    """Support setup.py upload."""
+
+    description = 'Build and publish the package.'
+    user_options = []
+
+    @staticmethod
+    def status(s):
+        """Prints things in bold."""
+        print('\033[1m{0}\033[0m'.format(s))
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def yes_or_no(self, question):
+        while True:
+            reply = str(raw_input(question +' (y/n): ')).lower().strip()
+            if reply == 'y':
+                return True
+            return False
+
+    def run(self):
+        try:
+            self.status('Removing previous builds...')
+            rmtree(os.path.join(here, 'dist'))
+        except OSError:
+            pass
+
+        if not self.yes_or_no("Have you done the following? \n" +
+                    "- Updated README/Documentation?\n"
+                    "- Are in the master branch, and have you merged version branch into master?\n"
+                    "- Have you run the tests ('pytest tests/')?\n"
+                    "- Have you updated CHANGELOG?\n"
+                    "- Have you updated Transit Essentiality page?\n"
+                    "- Updated version in src/pytransit/__init__.py (used to set git tag)?\n"
+                    "- Is version v{0} correct".format(version)):
+            self.status("Exiting...")
+            sys.exit()
+
+        self.status('Building Source and Wheel (universal) distribution...')
+        os.system('{0} setup.py sdist bdist_wheel'.format(sys.executable))
+
+        if self.yes_or_no("Add tag and push to public github? tag:v{0}".format(version)):
+            self.status('Adding and pushing git tags to origin and public...')
+            os.system('git tag v{0}'.format(version))
+            os.system('git push origin --tags')
+            os.system('git push https://github.com/mad-lab/transit master')
+            os.system('git push https://github.com/mad-lab/transit --tags')
+        else:
+            self.status("Exiting...")
+            sys.exit()
+
+        if self.yes_or_no("Proceed with publish to PyPI? version: v{0}, tag:v{0}".format(version)):
+            self.status('Uploading the package to PyPI via Twine...')
+            os.system('twine upload dist/*')
+        else:
+            self.status("Exiting...")
+            sys.exit()
+
+        sys.exit()
 
 setup(
     name='tnseq-transit',
@@ -34,6 +101,7 @@ setup(
 
     description='TRANSIT is a tool for the analysis of Tn-Seq data. It provides an easy to use graphical interface and access to three different analysis methods that allow the user to determine essentiality in a single condition as well as between conditions.',
     long_description=long_description,
+    long_description_content_type='text/markdown',
 
     # The project's main homepage.
     url='https://github.com/mad-lab/transit',
@@ -45,12 +113,14 @@ setup(
 
     # Choose your license
     license='GNU GPL',
-
+    python_requires='>=3.6',
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
+
     classifiers=[
         #'Development Status :: 3 - Alpha',
         'Development Status :: 5 - Production/Stable',
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 3',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Operating System :: OS Independent',
@@ -78,7 +148,7 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['setuptools', 'numpy~=1.15', 'scipy~=1.1', 'matplotlib~=2.2', 'pillow~=5.0', 'statsmodels~=0.9'],
+    install_requires=['setuptools', 'numpy~=1.16', 'scipy~=1.2', 'matplotlib~=3.0', 'pillow~=6.0', 'statsmodels~=0.9'],
 
     #dependency_links = [
     #	"git+https://github.com/wxWidgets/wxPython.git#egg=wxPython"
@@ -116,6 +186,9 @@ setup(
             'transit=pytransit.__main__:run_main',
             'tpp=pytpp.__main__:run_main',
         ],
+    },
+    cmdclass={
+        'upload': UploadCommand,
     },
 )
 

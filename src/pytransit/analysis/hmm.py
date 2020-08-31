@@ -23,7 +23,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
 import pytransit.norm_tools as norm_tools
@@ -73,7 +73,7 @@ class HMMSitesFile(base.TransitFile):
             elif tmp[col] == "GD": gd+=1
             elif tmp[col] == "NE": ne+=1
             elif tmp[col] == "GA": ga+=1
-            else: print tmp
+            else: print(tmp)
             T+=1
 
         text = """Results:
@@ -226,6 +226,7 @@ class HMMMethod(base.SingleConditionMethod):
         normalization = wxobj.hmmNormChoice.GetString(wxobj.hmmNormChoice.GetCurrentSelection())
 
         LOESS = False
+        LOESS = wxobj.hmmLoessCheck.GetValue()
 
         #Get output path
         name = transit_tools.basename(ctrldata[0])
@@ -257,7 +258,7 @@ class HMMMethod(base.SingleConditionMethod):
         output_file = open(outpath, "w")
 
         replicates = kwargs.get("r", "Mean")
-        normalization = kwargs.get("r", "TTR")
+        normalization = kwargs.get("n", "TTR")
         LOESS = kwargs.get("l", False)
         ignoreCodon = True
         NTerminus = float(kwargs.get("iN", 0.0))
@@ -355,7 +356,7 @@ class HMMMethod(base.SingleConditionMethod):
         #################
 
         T = len(O); total=0; state2count = dict.fromkeys(range(Nstates),0)
-        for t in xrange(T):
+        for t in range(T):
             state = Q_opt[t]
             state2count[state] +=1
             total+=1
@@ -372,11 +373,13 @@ class HMMMethod(base.SingleConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8')))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
        
         self.output.write("# \n")
         self.output.write("# Mean:\t%2.2f\n" % (numpy.average(reads_nz)))
         self.output.write("# Median:\t%2.2f\n" % numpy.median(reads_nz))
+        self.output.write("# Normalization:\t%s\n" % self.normalization)
+        self.output.write("# LOESS Correction:\t%s\n" % str(self.LOESS))
         self.output.write("# pins (obs):\t%f\n" % pins_obs)
         self.output.write("# pins (est):\t%f\n" % pins)
         self.output.write("# Run length (r):\t%d\n" % r)
@@ -392,7 +395,7 @@ class HMMMethod(base.SingleConditionMethod):
 
         states = [int(Q_opt[t]) for t in range(T)]
         last_orf = ""
-        for t in xrange(T):
+        for t in range(T):
             s_lab = label.get(states[t], "Unknown State")
             gamma_t = (alpha[:,t] * beta[:,t])/numpy.sum(alpha[:,t] * beta[:,t])
             genes_at_site = hash.get(position[t], [""])
@@ -426,13 +429,14 @@ class HMMMethod(base.SingleConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s hmm <comma-separated .wig files> <annotation .prot_table or GFF3> <output file>
+        return """python3 %s hmm <comma-separated .wig files> <annotation .prot_table or GFF3> <output file>
 
         Optional Arguments:
             -r <string>     :=  How to handle replicates. Sum, Mean. Default: -r Mean
+            -n <string>     :=  Normalization method. Default: -n TTR
             -l              :=  Perform LOESS Correction; Helps remove possible genomic position bias. Default: Off.
-            -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-            -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+            -iN <float>     :=  Ignore TAs occuring within given percentage (as integer) of the N terminus. Default: -iN 0
+            -iC <float>     :=  Ignore TAs occuring within given percentage (as integer) of the C terminus. Default: -iC 0
         """ % (sys.argv[0])
 
 
@@ -448,7 +452,7 @@ class HMMMethod(base.SingleConditionMethod):
         C[0] = 1.0/numpy.sum(alpha[:,0])
         alpha[:,0] = C[0] * alpha[:,0]
 
-        for t in xrange(1, T):
+        for t in range(1, T):
             #B[i](O[:,t])  =>  numpy.prod(B[i](O[:,t]))
             #b_o = numpy.array([numpy.prod(B[i](O[:,t])) for i in range(N)])
             b_o = [B[i](O[t]) for i in range(N)]
@@ -462,9 +466,9 @@ class HMMMethod(base.SingleConditionMethod):
                 alpha[:,t] = 0.0000000000001
            
             text = "Running HMM Method... %1.1f%%" % (100.0*self.count/self.maxiterations)
-            self.progress_update(text, self.count)
+            if self.count%1000==0: self.progress_update(text, self.count)
             self.count+=1
-            #print t, O[:,t], alpha[:,t]
+            #print(t, O[:,t], alpha[:,t])
 
         log_Prob_Obs = - (numpy.sum(numpy.log(C)))
         return(( log_Prob_Obs, alpha, C ))
@@ -478,7 +482,7 @@ class HMMMethod(base.SingleConditionMethod):
         beta[:,T-1] = 1.0
         if C.any(): beta[:,T-1] = beta[:,T-1] * C[T-1]
 
-        for t in xrange(T-2, -1, -1):
+        for t in range(T-2, -1, -1):
             #B[i](O[:,t])  =>  numpy.prod(B[i](O[:,t]))
             #b_o = numpy.array([numpy.prod(B[i](O[:,t])) for i in range(N)])
             b_o = [B[i](O[t]) for i in range(N)]
@@ -492,7 +496,7 @@ class HMMMethod(base.SingleConditionMethod):
                 beta[:,t] = beta[:,t] * C[t]
 
             text = "Running HMM Method... %1.1f%%" % (100.0*self.count/self.maxiterations)
-            self.progress_update(text, self.count)
+            if self.count%1000==0: self.progress_update(text, self.count)
             self.count+=1
 
         return(beta)
@@ -510,22 +514,22 @@ class HMMMethod(base.SingleConditionMethod):
         Q = numpy.zeros((N, T), dtype=int)
 
         numpy.seterr(divide='ignore')
-        for t in xrange(1, T):
+        for t in range(1, T):
             b_o = [B[i](O[t]) for i in range(N)]
             #nus = delta[:, t-1] + numpy.log(A)
             nus = delta[:, t-1] + A
             delta[:,t] = nus.max(1) + numpy.log(b_o)
             Q[:,t] = nus.argmax(1)
             text = "Running HMM Method... %5.1f%%" % (100.0*self.count/self.maxiterations)
-            self.progress_update(text, self.count)
+            if self.count%1000==0: self.progress_update(text, self.count)
             self.count+=1
 
         Q_opt = [int(numpy.argmax(delta[:,T-1]))]
-        for t in xrange(T-2, -1, -1):
+        for t in range(T-2, -1, -1):
             Q_opt.insert(0, Q[Q_opt[0],t+1])
 
             text = "Running HMM Method... %5.1f%%" % (100.0*self.count/self.maxiterations)
-            self.progress_update(text, self.count)
+            if self.count%1000==0: self.progress_update(text, self.count)
             self.count+=1
 
         numpy.seterr(divide='warn')
@@ -556,10 +560,12 @@ class HMMMethod(base.SingleConditionMethod):
         output = open(output_path, "w")
         pos2state = dict([(position[t],states[t]) for t in range(len(states))])
         theta = numpy.mean(data > 0)
-        G = tnseq_tools.Genes(self.ctrldata, self.annotation_path, data=data, position=position, ignoreCodon=False)
+        G = tnseq_tools.Genes(self.ctrldata, self.annotation_path, data=data, position=position, ignoreCodon=False, nterm=self.NTerminus, cterm=self.CTerminus)
 
         num2label = {0:"ES", 1:"GD", 2:"NE", 3:"GA"}
         output.write("#HMM - Genes\n")        
+
+        lines,counts = [],{}
         for gene in G:
             
             reads_nz = [c for c in gene.reads.flatten() if c > 0]
@@ -580,10 +586,11 @@ class HMMMethod(base.SingleConditionMethod):
 
 
             if gene.n > 0:
-                E = tnseq_tools.ExpectedRuns(gene.n,   1.0 - theta)
-                V = tnseq_tools.VarR(gene.n,   1.0 - theta)
+                # this was intended to call genes ES if have sufficiently long run, but n0 (#ES) not even consecutive
+                #E = tnseq_tools.ExpectedRuns(gene.n,   1.0 - theta)
+                #V = tnseq_tools.VarR(gene.n,   1.0 - theta)
                 if n0 == gene.n: S = "ES"
-                elif n0 >= int(E+(3*math.sqrt(V))): S = "ES"
+                #elif n0 >= int(E+(3*math.sqrt(V))): S = "ES"
                 else:
                     temp = max([(statedist.get(s, 0), s) for s in [0, 1, 2, 3]])[1]
                     S = num2label[temp]
@@ -591,8 +598,14 @@ class HMMMethod(base.SingleConditionMethod):
                 E = 0.0
                 V = 0.0
                 S = "N/A"
-            output.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%1.4f\t%1.2f\t%s\n" % (gene.orf, gene.name, gene.desc, gene.n, n0, n1, n2, n3, gene.theta(), avg_read_nz, S))
+            lines.append("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%1.4f\t%1.2f\t%s\n" % (gene.orf, gene.name, gene.desc, gene.n, n0, n1, n2, n3, gene.theta(), avg_read_nz, S))
+            if S not in counts: counts[S] = 0
+            counts[S] += 1
 
+        output.write("#genes: ES=%s, GD=%s, NE=%s, GA=%s, N/A=%s\n" % tuple([counts.get(x,0) for x in "ES GD NE GA N/A".split()]))
+        output.write("#key: ES=essential, GD=insertions cause growth-defect, NE=non-essential, GA=insertions confer growth-advantage, N/A=not analyzed (genes with 0 TA sites)\n")
+        output.write("#ORF\tgene\tannotation\tTAs\tES sites\tGD sites\tNE sites\tGA sites\tsaturation\tmean\tcall\n")
+        for line in lines: output.write(line)
         output.close()
 
 
@@ -612,8 +625,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")   
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

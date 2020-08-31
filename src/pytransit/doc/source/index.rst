@@ -4,6 +4,9 @@
 Welcome to TRANSIT's documentation!
 ===================================
 
+.. image:: https://img.shields.io/github/tag/mad-lab/transit.svg
+    :target: https://github.com/mad-lab/transit
+    :alt: GitHub last tag
 
 This page contains the documentation for TRANSIT. Below are a few quick links to some of the most important sections of the documentation, followed by a brief overview of TRANSIT's features.
 
@@ -39,15 +42,16 @@ TRANSIT offers a variety of features including:
 
 
 
-
-Mailing List
-~~~~~~~~~~~~
-
-You can join our mailing list to get announcements of new versions, discuss any bugs, or request features! Just head over to the following site and enter your email address:
-
-
- + `https://groups.google.com/forum/#!forum/tnseq-transit/join <https://groups.google.com/forum/#!forum/tnseq-transit/join>`_
-
+.. 
+ Mailing List
+ ~~~~~~~~~~~~
+ 
+ You can join our mailing list to get announcements of new versions, discuss any bugs, or request features! Just head over to the following site and enter your email address:
+ 
+ 
+  + `https://groups.google.com/forum/#!forum/tnseq-transit/join <https://groups.google.com/forum/#!forum/tnseq-transit/join>`_
+ 
+..
 
 
 .. _manual-link:
@@ -95,3 +99,10 @@ You can join our mailing list to get announcements of new versions, discuss any 
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Support
+~~~~~~~
+
+For any questions or comments, please contact Dr. Thomas Ioerger, ioerger@cs.tamu.edu.
+
+

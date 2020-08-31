@@ -24,7 +24,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
@@ -361,7 +361,7 @@ class UTestMethod(base.DualConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: norm=%s, includeZeros=%s, output=%s\n" % (self.normalization, self.includeZeros, self.output.name.encode('utf-8')))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
         self.output.write("#Control Data: %s\n" % (",".join(self.ctrldata).encode('utf-8')))
         self.output.write("#Experimental Data: %s\n" % (",".join(self.expdata).encode('utf-8')))
         self.output.write("#Annotation path: %s\n" % (self.annotation_path.encode('utf-8')))
@@ -381,14 +381,14 @@ class UTestMethod(base.DualConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s utest <comma-separated .wig control files> <comma-separated .wig experimental files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+        return """python3 %s utest <comma-separated .wig control files> <comma-separated .wig experimental files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
 
         Optional Arguments:
         -n <string>     :=  Normalization method. Default: -n TTR
         -iz             :=  Include rows with zero accross conditions.
         -l              :=  Perform LOESS Correction; Helps remove possible genomic position bias. Default: Turned Off.
-        -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-        -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+        -iN <float>     :=  Ignore TAs occuring at given fraction (as integer) of the N terminus. Default: -iN 0
+        -iC <float>     :=  Ignore TAs occuring at given fraction (as integer) of the C terminus. Default: -iC 0
         """ % (sys.argv[0])
 
 
@@ -405,8 +405,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

@@ -24,7 +24,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.export import base
 import pytransit
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
@@ -57,9 +57,9 @@ class CombinedWigGUI(base.ExportGUI):
 ########## METHOD #######################
 
 class CombinedWigMethod(base.SingleConditionMethod):
-    """   
+    """
     CombinedWig
- 
+
     """
     def __init__(self,
                 ctrldata,
@@ -79,7 +79,7 @@ class CombinedWigMethod(base.SingleConditionMethod):
     @classmethod
     def fromGUI(self, wxobj):
         """ """
-        
+
         #Get Annotation file
         annotationPath = wxobj.annotation
         if not transit_tools.validate_annotation(annotationPath):
@@ -102,7 +102,7 @@ class CombinedWigMethod(base.SingleConditionMethod):
         ignoreCodon = True
         NTerminus = 0.0
         CTerminus = 0.0
-        
+
 
         #Get output path
         defaultFileName = "combined_wig_output.dat"
@@ -123,8 +123,13 @@ class CombinedWigMethod(base.SingleConditionMethod):
                 CTerminus, wxobj)
 
     @classmethod
-    def fromargs(self, rawargs): 
+    def fromargs(self, rawargs):
         (args, kwargs) = transit_tools.cleanargs(rawargs)
+
+        if (len(args) != 3): # wigs prot_table output
+            print("Error: Incorrect number of args. See usage")
+            print(self.usage_string())
+            sys.exit(0)
 
         ctrldata = args[0].split(",")
         annotationPath = args[1]
@@ -150,11 +155,11 @@ class CombinedWigMethod(base.SingleConditionMethod):
 
         self.transit_message("Starting Combined Wig Export")
         start_time = time.time()
-        
+
         #Get orf data
         self.transit_message("Getting Data")
         (fulldata, position) = tnseq_tools.get_data(self.ctrldata)
-        (fulldata, factors) = norm_tools.normalize_data(fulldata, self.normalization, 
+        (fulldata, factors) = norm_tools.normalize_data(fulldata, self.normalization,
             self.ctrldata, self.annotation_path)
         position = position.astype(int)
 
@@ -174,45 +179,46 @@ class CombinedWigMethod(base.SingleConditionMethod):
         (K,N) = fulldata.shape
         for f in self.ctrldata:
             self.output.write("#File: %s\n" % f)
-    
+        self.output.write("#TAcoord\t%s\n" % ('\t'.join(self.ctrldata)))
+
         for i,pos in enumerate(position):
             #self.output.write("%d\t%s\t%s\n" % (position[i], "\t".join(["%1.1f" % c for c in fulldata[:,i]]),",".join(["%s (%s)" % (orf,rv2info.get(orf,["-"])[0]) for orf in hash.get(position[i], [])])   ))
             if self.normalization!='nonorm': vals = "\t".join(["%1.1f" % c for c in fulldata[:,i]])
             else: vals = "\t".join(["%d" % c for c in fulldata[:,i]]) # no decimals if raw counts
             self.output.write("%d\t%s\t%s\n" % (position[i],vals,",".join(["%s (%s)" % (orf,rv2info.get(orf,["-"])[0]) for orf in hash.get(position[i], [])])   ))
-            # Update progress    
+            # Update progress
             text = "Running Export Method... %5.1f%%" % (100.0*i/N)
-            self.progress_update(text, i)
+            if i%1000==0: self.progress_update(text, i)
         self.output.close()
 
 
 
-        self.transit_message("") # Printing empty line to flush stdout 
+        self.transit_message("") # Printing empty line to flush stdout
         self.finish()
-        self.transit_message("Finished Export") 
+        self.transit_message("Finished Export")
 
 #
 
     @classmethod
     def usage_string(self):
-        return """python %s export combined_wig <comma-separated .wig files> <annotation .prot_table> <output file>""" % (sys.argv[0])
+        return """python %s export combined_wig <comma-separated .wig files> <annotation .prot_table> <output file> [-n normalization_method]\ndefault normalization_method=TTR""" % (sys.argv[0])
 
 
 if __name__ == "__main__":
 
     (args, kwargs) = transit_tools.cleanargs(sys.argv[1:])
 
-    print "ARGS:", args
-    print "KWARGS:", kwargs
+    print("ARGS:", args)
+    print("KWARGS:", kwargs)
 
     G = Example.fromargs(sys.argv[1:])
 
-    print G
-    G.console_message("Printing the member variables:")   
+    print(G)
+    G.console_message("Printing the member variables:")
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

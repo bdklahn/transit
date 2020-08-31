@@ -24,9 +24,9 @@ import scipy.stats
 import datetime
 import warnings
 
-import base
+from pytransit.analysis import base
 import pytransit.transit_tools as transit_tools
-import pytransit.tnseq_tools as tnseq_tools
+from pytransit import tnseq_tools
 import pytransit.norm_tools as norm_tools
 import pytransit.stat_tools as stat_tools
 
@@ -349,8 +349,8 @@ class GumbelMethod(base.SingleConditionMethod):
         T = G.local_gene_span()[ii_good]
 
         self.transit_message("Doing Regression")
-        mu_s, temp, sigma_s = stat_tools.regress(R, S) # Linear regression to estimate mu_s, sigma_s for span data
-        mu_r, temp, sigma_r = stat_tools.regress(S, R) # Linear regression to estimate mu_r, sigma_r for run data
+        mu_s, temp, sigma_s = stat_tools.regress(R, S, self.output.name.encode('utf-8')) # Linear regression to estimate mu_s, sigma_s for span data
+        mu_r, temp, sigma_r = stat_tools.regress(S, R, self.output.name.encode('utf-8')) # Linear regression to estimate mu_r, sigma_r for run data
 
         N_GENES = len(G)
         N_GOOD = sum(ii_good)
@@ -408,16 +408,19 @@ class GumbelMethod(base.SingleConditionMethod):
                 self.transit_message("Quitting.") 
                 return
 
-#            print i,phi_new,w1,G[idxG].name,N[idxN],R[idxN],Z[idxN]
+#            print(i,phi_new,w1,G[idxG].name,N[idxN],R[idxN],Z[idxN])
             
             phi_old = phi_new
             #Update progress
             text = "Running Gumbel Method... %5.1f%%" % (100.0*(count+1)/(self.samples+self.burnin))
             self.progress_update(text, count)
-
-
-        ZBAR = numpy.apply_along_axis(numpy.mean, 1, Z_sample)
-        (ess_t, non_t) = stat_tools.bayesian_ess_thresholds(ZBAR)
+            
+        try:
+            ZBAR = numpy.apply_along_axis(numpy.mean, 1, Z_sample)
+            (ess_t, non_t) = stat_tools.bayesian_ess_thresholds(ZBAR)
+        except ValueError:
+            print("ValueError in ZBAR calculation: {} {}".format(Z_sample, self.output.name.encode('utf-8')), file=sys.stderr)
+            ess_t, non_t = float("inf"), -float("inf")
 
         #Orf    k   n   r   s   zbar
         self.output.write("#Gumbel\n")
@@ -428,7 +431,7 @@ class GumbelMethod(base.SingleConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: ctrldata=%s, annotation=%s, output=%s, samples=%s, minread=%s, trim=%s\n" % (",".join(self.ctrldata).encode('utf-8'), self.annotation_path.encode('utf-8'), self.output.name.encode('utf-8'), self.samples, self.minread, self.trim))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
 
         self.output.write("#Data: %s\n" % (",".join(self.ctrldata).encode('utf-8'))) 
         self.output.write("#Annotation path: %s\n" % self.annotation_path.encode('utf-8')) 
@@ -469,7 +472,7 @@ class GumbelMethod(base.SingleConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s gumbel <comma-separated .wig files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+        return """python3 %s gumbel <comma-separated .wig files> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
     
         Optional Arguments:
         -s <integer>    :=  Number of samples. Default: -s 10000
@@ -477,8 +480,8 @@ class GumbelMethod(base.SingleConditionMethod):
         -m <integer>    :=  Smallest read-count to consider. Default: -m 1
         -t <integer>    :=  Trims all but every t-th value. Default: -t 1
         -r <string>     :=  How to handle replicates. Sum or Mean. Default: -r Sum
-        -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-        -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+        -iN <float>     :=  Ignore TAs occuring within given percentage (as integer) of the N terminus. Default: -iN 0
+        -iC <float>     :=  Ignore TAs occuring within given percentage (as integer) of the C terminus. Default: -iC 0
         """ % (sys.argv[0])
 
     def good_orf(self, gene):
@@ -507,7 +510,7 @@ class GumbelMethod(base.SingleConditionMethod):
         for i in range(len(N)): # estimate more accurately based on expected run len, using exact calc for small genes
           if N[i]<EXACT: mu[i] = self.ExpectedRuns_cached(int(N[i]),p)-BetaGamma
         sigma = 1/math.log(1/p);
-        #for i in range(len(N)): print '\t'.join([str(x) for x in N[i],R[i],self.ExpectedRuns_cached(int(N[i]),q),mu[i],scipy.stats.gumbel_r.pdf(R[i], mu[i], sigma)])
+        #for i in range(len(N)): print('\t'.join([str(x) for x in N[i],R[i],self.ExpectedRuns_cached(int(N[i]),q),mu[i],scipy.stats.gumbel_r.pdf(R[i], mu[i], sigma)]))
         total += numpy.sum(scipy.stats.gumbel_r.logpdf(R, mu, sigma))
         return(total)
     
@@ -530,15 +533,22 @@ class GumbelMethod(base.SingleConditionMethod):
         MEAN_DOMAIN_SPAN = 300
 
         if d == 0: return(0.00)
-        f = 1./(1.+math.exp(Kn*(MEAN_DOMAIN_SPAN-d)))
+        try:
+            f = 1./(1.+math.exp(Kn*(MEAN_DOMAIN_SPAN-d)))
+        except OverflowError:
+            sys.stderr.write("Sigmoid overflow. d: {} n: {}.\n".format(d, n))
+            sys.stderr.flush()
+            f = 2e-16
+        except ZeroDivisionError:
+            sys.stderr.write("Sigmoid zero division. d: {} n: {}.\n".format(d, n))
+            sys.stderr.flush()
+            f = float("inf")
         #if n in self.cache_nn: return f/self.cache_nn[n]
         tot = 0
         N = int(n+1)
         for i in range(1,N): tot += 1.0/(1.0+math.exp(Kn*(MEAN_DOMAIN_SPAN-i)))
         self.cache_nn[n] = tot
         return f/tot
-
-
 
 
 
@@ -552,8 +562,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")   
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 

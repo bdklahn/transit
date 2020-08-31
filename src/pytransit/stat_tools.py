@@ -1,5 +1,6 @@
 import math
 import numpy
+import sys
 import scipy.stats
 
 
@@ -263,7 +264,7 @@ def isEven(x):
 
 #
 
-def regress(X,Y):
+def regress(X,Y,message=""):
     """Performs linear regression given two vectors, X, Y."""
     N = len(X)
     xbar = numpy.average(X)
@@ -275,11 +276,13 @@ def regress(X,Y):
 
     yfit = [ A0 + B *X[i] for i in range(N)]
     yres = [Y[i] - (A0 + B *X[i]) for i in range(N)]
-    var = sum([math.pow(yres[i],2) for i in range(N) ])/(N-2)
-    std = math.sqrt(var)
-
+    try:
+        var = sum([math.pow(yres[i],2) for i in range(N) ])/(N-2)
+        std = math.sqrt(var)
+    except ZeroDivisionError:
+        std = float("inf")
+        print("ZeroDivisionError in regression: {}".format(message),file=sys.stderr)
     return(B, A0, std)
-
 #
 
 def boxcoxtransform(x, lambdax):
@@ -289,7 +292,7 @@ def boxcoxtransform(x, lambdax):
     Fixed: '>' has changed to '<'
     """
     if x <= 0:
-        raise ArgumentError, "Nonpositive value(s) in X vector"
+        raise ValueError("Nonpositive value(s) in X vector")
     if abs(lambdax) < 1.0e-5:
         return(math.log(x))
     else:
@@ -353,11 +356,11 @@ def BH_fdr_correction(X):
     pvalues.sort()
     pvalues = pvalues[::-1]
     
-    for i in xrange(n):
+    for i in range(n):
         rank = n - i
         qvalues[i] = n/float(rank) * pvalues[i]
  
-    for i in xrange(0, n-1):
+    for i in range(0, n-1):
         if qvalues[i] < qvalues[i+1]:
             qvalues[i+1] = qvalues[i]
         
@@ -373,7 +376,7 @@ def bayesian_ess_thresholds(Z_raw, ALPHA=0.05):
     N = len(Z)
 
     ess_threshold = 1.00
-    INDEX = range(3, N+1)
+    INDEX = list(range(3, N+1))
     count = 0
     for i in INDEX:
         count +=1
@@ -381,15 +384,15 @@ def bayesian_ess_thresholds(Z_raw, ALPHA=0.05):
         ai_n = (ALPHA*i)/N
         mean_wi = numpy.average(W[0:i-2])
         delta_w = wi - mean_wi
-        #if count < 30: print i, wi, ai_n, delta_w
+        #if count < 30: print(i, wi, ai_n, delta_w)
         if delta_w > ai_n:
             ess_threshold = Z[i-1]
-            #print "i", i
+            #print("i", i)
             break
 
     noness_threshold = 0.00
     count = 0
-    INDEX = range(0, N+1)
+    INDEX = list(range(0, N+1))
     INDEX.sort(reverse=True)
     for i in INDEX:
         wi = Z[N-i+1]
@@ -397,12 +400,12 @@ def bayesian_ess_thresholds(Z_raw, ALPHA=0.05):
         mean_wi = numpy.average(Z[N-i+1:])
         delta_w = Z[N-i+1] - mean_wi
         count +=1
-        #print count
+        #print(count)
         #if count < 20:
-        #   print i, wi, ai_n, mean_wi, delta_w, N-i+1, N-1, W[N-i-1], W[i-1]
+        #   print(i, wi, ai_n, mean_wi, delta_w, N-i+1, N-1, W[N-i-1], W[i-1])
 
         if ai_n > delta_w:
-        #   print i, wi, ai_n, mean_wi, delta_w, N-i+1, N-1, W[N-i-1], W[i-1]
+        #   print(i, wi, ai_n, mean_wi, delta_w, N-i+1, N-1, W[N-i-1], W[i-1])
             break
         noness_threshold = Z[N-i]
 
@@ -439,10 +442,10 @@ def loess(X, Y, h=10000):
 def loess_correction(X, Y, h=10000, window=100):
     #TODO: Write docstring
     Y = numpy.array(Y)
-    size = len(X)/window + 1
+    size = int(len(X)/window) + 1
     x_w = numpy.zeros(size)
     y_w = numpy.zeros(size)
-    for i in range(len(X)/window + 1):
+    for i in range(size):
         x_w[i] = window*i
         y_w[i] = sum(Y[window*i:window*(i+1)])
 
@@ -505,21 +508,21 @@ def F_shuffle_dict_libraries(*args, **kwargs):
     D = args[0]
     E = {}
     for L in D:
-        #print "L", L
+        #print("L", L)
         n1 = len(D[L][0])
         combined = numpy.append(D[L][0], D[L][1])
-        #print "combined", combined
+        #print("combined", combined)
         perm = numpy.random.permutation(combined)
-        #print "perm", perm
-        #print "perm[:n1]", perm[:n1]
+        #print("perm", perm)
+        #print("perm[:n1]", perm[:n1])
         E[L] = numpy.array([perm[:n1], perm[n1:]])
-        #print "D[L]", D[L]
+        #print("D[L]", D[L])
     return E
 
 #
 
 def resampling(data1, data2, S=10000, testFunc=F_mean_diff_flat,
-            permFunc=F_shuffle_flat, adaptive=False, lib_str1="", lib_str2=""):
+            permFunc=F_shuffle_flat, adaptive=False, lib_str1="", lib_str2="",PC=1):
     """Does a permutation test on two sets of data.
 
     Performs the resampling / permutation test given two sets of data using a
@@ -589,23 +592,19 @@ def resampling(data1, data2, S=10000, testFunc=F_mean_diff_flat,
     if n2 > 0:
         mean2 = numpy.mean(data2)
 
-    try:
-        # Only adjust log2FC if one of the means is zero
-        if mean1 > 0 and mean2 > 0:
-            log2FC = math.log((mean2)/(mean1),2)
-        else:
-            log2FC = math.log((mean2+1.0)/(mean1+1.0),2)
-    except:
-        log2FC = 0.0
-   
+    if PC>0: log2FC = math.log((mean2+PC)/(mean1+PC),2) # as of 3/5/20
+    else:
+      # Only adjust log2FC if one of the means is zero
+      if mean1 > 0 and mean2 > 0: log2FC = math.log((mean2)/(mean1),2)
+      else: log2FC = math.log((mean2+1.0)/(mean1+1.0),2)
 
  
     # Get stats and info based on whether working with libraries or not:
     nTAs = 0
     if lib_str1:
         # Get number of TA sites implied
-        nTAs = len(data1.flatten())/len(lib_str1)
-        assert len(data2.flatten())/len(lib_str2) == nTAs, "Datasets do not have matching sites;\
+        nTAs = len(data1.flatten())//len(lib_str1)
+        assert len(data2.flatten())//len(lib_str2) == nTAs, "Datasets do not have matching sites;\
              check input data and library strings."
         # Get data
         perm = get_lib_data_dict(data1, lib_str1, data2, lib_str2, nTAs)
@@ -614,15 +613,15 @@ def resampling(data1, data2, S=10000, testFunc=F_mean_diff_flat,
         try:
             test_obs = testFunc(data1, data2)
         except Exception as e:
-            print ""
-            print "!"*100
-            print "Error: Could not apply test function to input data!"
-            print "data1", data1
-            print "data2", data2
-            print ""
-            print "\t%s" % e
-            print "!"*100
-            print ""
+            print("")
+            print("!"*100)
+            print("Error: Could not apply test function to input data!")
+            print("data1", data1)
+            print("data2", data2)
+            print("")
+            print("\t%s" % e)
+            print("!"*100)
+            print("")
             return None
 
         perm = numpy.zeros(n1+n2)
@@ -691,21 +690,21 @@ def text_histogram(X, nBins = 20, resolution=200, obs = None):
             flag = hit_flag
         else:
             flag  = empty_flag
-        print "%-12f\t%s|%s" % (b_l, flag, "#"*int(resolution*density))
+        print("%-12f\t%s|%s" % (b_l, flag, "#"*int(resolution*density)))
     Z = numpy.logical_and(bin_list[-1] <= X,  X < float("inf"))
     density = numpy.mean(Z)
     if obs != None and (bin_list[-1] <= obs < float("inf")):
         flag = hit_flag
     else:
         flag = empty_flag
-    print "%-12f\t%s|%s" % (bin_list[-1], flag,  "#"*int(resolution*density))
+    print("%-12f\t%s|%s" % (bin_list[-1], flag,  "#"*int(resolution*density)))
 
 
 
 def parse_lib_index(nData, libstr, nTAs):
     full_index = numpy.arange(nData)
     lib_to_index = {}
-    for (k,L) in enumerate(libstr):
+    for k,L in enumerate(libstr):
         if L not in lib_to_index: lib_to_index[L] = []
         lib_to_index[L] += list(full_index[k*nTAs:((k+1)*nTAs)])
     for L,index in lib_to_index.items():
@@ -742,49 +741,49 @@ if __name__ == "__main__":
     n = 20
     p = 0.5
     k = 14
-    print ""
-    print "#########################################"
-    print "############ BINOM TEST #################"
-    print "#########################################"
-    print "Coin Tosses: %d" % n
-    print "Success Prob: %3.2f" % p
-    print "Observed: %d" % k
+    print("")
+    print("#########################################")
+    print("############ BINOM TEST #################")
+    print("#########################################")
+    print("Coin Tosses: %d" % n)
+    print("Success Prob: %3.2f" % p)
+    print("Observed: %d" % k)
 
 
-    print ""
-    print "Left-Tail Test:"
-    print "%d tosses, p-value = %f" % (k, binom_test(k,n,p,"less"))
+    print("")
+    print("Left-Tail Test:")
+    print("%d tosses, p-value = %f" % (k, binom_test(k,n,p,"less")))
 
-    print ""
-    print "Right-Tail Test:"
-    print "%d tosses, p-value = %f" % (k, binom_test(k,n,p,"greater"))
-
-
-    print ""
-    print "Two-Sided Test:"
-    print "%d tosses, p-value = %f" % (k, binom_test(k,n,p,"two-sided"))
+    print("")
+    print("Right-Tail Test:")
+    print("%d tosses, p-value = %f" % (k, binom_test(k,n,p,"greater")))
 
 
+    print("")
+    print("Two-Sided Test:")
+    print("%d tosses, p-value = %f" % (k, binom_test(k,n,p,"two-sided")))
 
-    print ""
-    print ""
-    print "#########################################"
-    print "############ RESAMPLING #################"
-    print "#########################################"
+
+
+    print("")
+    print("")
+    print("#########################################")
+    print("############ RESAMPLING #################")
+    print("#########################################")
 
     data1 = scipy.stats.norm.rvs(100,10, size=1000)
     data2 = scipy.stats.norm.rvs(105,10, size=1000)
 
     (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail, test_list) = resampling(data1, data2, S=10000)
-    print "Data1:"
+    print("Data1:")
     text_histogram(data1, nBins = 20)
-    print ""
-    print "Data2:"
+    print("")
+    print("Data2:")
     text_histogram(data2, nBins = 20)
-    print ""
-    print "Results:", (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail)
-    print ""
-    print "Resampling Histogram:"   
+    print("")
+    print("Results:", (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail))
+    print("")
+    print("Resampling Histogram:"   )
     text_histogram(test_list, nBins = 20, obs=test_obs)
 
     """
@@ -838,11 +837,11 @@ if __name__ == "__main__":
 
     gene = G[i]
 
-    print "\n\n"
-    print "#"*100
-    print "#  (%s)  NEW TEST:   %s"  % (DO_LIB, gene)
-    print "#"*100
-    print ""
+    print("\n\n")
+    print("#"*100)
+    print("#  (%s)  NEW TEST:   %s"  % (DO_LIB, gene))
+    print("#"*100)
+    print("")
        
 
  
@@ -858,7 +857,7 @@ if __name__ == "__main__":
     else:
         (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail, testlist) =  resampling(data1, data2, S=10000, testFunc=F_mean_diff_flat, permFunc=F_shuffle_flat, adaptive=False, lib_str1=ctrl_lib_str, lib_str2=exp_lib_str)
         
-    print "Resampling Histogram:"
+    print("Resampling Histogram:")
     text_histogram(testlist, nBins = 20, obs=test_obs)
     
      

@@ -24,7 +24,7 @@ import numpy
 import scipy.stats
 import datetime
 
-import base
+from pytransit.analysis import base
 import pytransit
 import pytransit.transit_tools as transit_tools
 import pytransit.tnseq_tools as tnseq_tools
@@ -40,10 +40,10 @@ long_name = "Genetic Interactions"
 short_desc = "Genetic interactions analysis for change in enrichment"
 long_desc = """Method for determining genetic interactions based on changes in enrichment (i.e. delta log fold-change in mean read counts).
 
-NOTE: This method requires 4 groups of datasets. Use the main interface to add datasets for the two strain backgrounds under the first condition. A window will allow you to add the datasets under the second condition.
+NOTE: This method requires 4 groups of datasets. Use the main interface to add datasets for the two strain backgrounds under the first condition. After pressing "Run GI", a subsequent window will allow you to add the datasets under the second condition.
 """
 
-transposons = []
+transposons = ["himar1"]
 columns = ["Orf","Name","Number of TA Sites","Mean count (Strain A Condition 1)","Mean count (Strain A Condition 2)","Mean count (Strain B Condition 1)","Mean count (Strain B Condition 2)", "Mean logFC (Strain A)", "Mean logFC (Strain B)", "Mean delta logFC","Lower Bound delta logFC","Upper Bound delta logFC", "Prob. of delta-logFC being within ROPE", "Adjusted Probability (BFDR)", "Is HDI outside ROPE?", "Type of Interaction"]
 
 
@@ -351,9 +351,9 @@ if hasWx:
                     )
                 if dlg.ShowModal() == wx.ID_OK:
                     paths = dlg.GetPaths()
-                    print "You chose the following Control file(s):"
+                    print("You chose the following Control file(s):")
                     for fullpath in paths:
-                        print "\t%s" % fullpath
+                        print("\t%s" % fullpath)
                         self.loadCtrlFile(fullpath)
                 dlg.Destroy()
             except Exception as e:
@@ -389,9 +389,9 @@ if hasWx:
                     )
                 if dlg.ShowModal() == wx.ID_OK:
                     paths = dlg.GetPaths()
-                    print "You chose the following Experimental file(s):"
+                    print("You chose the following Experimental file(s):")
                     for fullpath in paths:
-                        print "\t%s" % fullpath
+                        print("\t%s" % fullpath)
                         self.loadExpFile(fullpath)
                 dlg.Destroy()
             except Exception as e:
@@ -580,10 +580,19 @@ class GIMethod(base.QuadConditionMethod):
 
         (args, kwargs) = transit_tools.cleanargs(rawargs)
 
+        # ctrl-vs-exp = condition 1-vs-2
+        # originally, MAD defined order of CL args this way: strA/cond1, strB/cond1, strA/cond2, strB/cond
+        #ctrldataA = args[0].split(",")
+        #ctrldataB = args[1].split(",")
+        #expdataA = args[2].split(",")
+        #expdataB = args[3].split(",")
+
+        # TRI changed order of args this way: strA/cond1, strA/cond2, strB/cond1, strB/cond
         ctrldataA = args[0].split(",")
-        ctrldataB = args[1].split(",")
-        expdataA = args[2].split(",")
+        expdataA = args[1].split(",")
+        ctrldataB = args[2].split(",")
         expdataB = args[3].split(",")
+
         annotationPath = args[4]
         output_path = args[5]
         output_file = open(output_path, "w")
@@ -625,14 +634,13 @@ class GIMethod(base.QuadConditionMethod):
         start_time = time.time()
         self.output.write("#GI\n")
 
-        wiglist = self.ctrldataA + self.expdataA + self.ctrldataB + self.expdataB
+        wiglist = self.ctrldataA + self.ctrldataB + self.expdataA + self.expdataB
 
         Nwig = len(wiglist)
         Na1 = len(self.ctrldataA)
-        Nb1 = len(self.expdataA)
-        Na2 = len(self.ctrldataB)
+        Nb1 = len(self.ctrldataB)
+        Na2 = len(self.expdataA)
         Nb2 = len(self.expdataB)
-
 
         # Get data
         self.transit_message("Getting Data")
@@ -830,7 +838,7 @@ class GIMethod(base.QuadConditionMethod):
 
 
 
-        # Print output
+        # Print(output)
         if self.wxobj:
             members = sorted([attr for attr in dir(self) if not callable(getattr(self,attr)) and not attr.startswith("__")])
             memberstr = ""
@@ -838,7 +846,7 @@ class GIMethod(base.QuadConditionMethod):
                 memberstr += "%s = %s, " % (m, getattr(self, m))
             self.output.write("#GUI with: norm=%s, samples=%s, includeZeros=%s, output=%s\n" % (self.normalization, self.samples, self.includeZeros, self.output.name.encode('utf-8')))
         else:
-            self.output.write("#Console: python %s\n" % " ".join(sys.argv))
+            self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
 
 
         self.output.write("#Control Data-A: %s\n" % (",".join(self.ctrldataA).encode('utf-8')))
@@ -857,7 +865,7 @@ class GIMethod(base.QuadConditionMethod):
         self.output.write("#\n")
 
         # Write column names
-        self.output.write("#ORF\tName\tNumber of TA Sites\tMean count (Strain A Time 1)\tMean count (Strain A Time 2)\tMean count (Strain B Time 1)\tMean count (Strain B Time 2)\tMean logFC (Strain A)\tMean logFC (Strain B) \tMean delta logFC\tLower Bound delta logFC\tUpper Bound delta logFC\tProb. of delta-logFC being within ROPE\tAdjusted Probability (%s)\tIs HDI outside ROPE?\tType of Interaction\n" % adjusted_label)
+        self.output.write("#ORF\tName\tNumber of TA Sites\tMean count (Strain A Condition 1)\tMean count (Strain A Condition 2)\tMean count (Strain B Condition 1)\tMean count (Strain B Condition 2)\tMean logFC (Strain A)\tMean logFC (Strain B) \tMean delta logFC\tLower Bound delta logFC\tUpper Bound delta logFC\tProb. of delta-logFC being within ROPE\tAdjusted Probability (%s)\tIs HDI outside ROPE?\tType of Interaction\n" % adjusted_label)
 
         # Write gene results
         for i,row in enumerate(data):
@@ -893,7 +901,13 @@ class GIMethod(base.QuadConditionMethod):
 
     @classmethod
     def usage_string(self):
-        return """python %s GI <comma-separated .wig control files condition A> <comma-separated .wig control files condition B> <comma-separated .wig experimental files condition A> <comma-separated .wig experimental files condition B> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+        #return """python3 %s GI <comma-separated .wig control files condition A> <comma-separated .wig control files condition B> <comma-separated .wig experimental files condition A> <comma-separated .wig experimental files condition B> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+        return """python3 %s GI <wigs_for_strA_cond1> <wigs_for_strA_cond2> <wigs_for_strB_cond1> <wigs_for_strB_cond2> <annotation .prot_table or GFF3> <output file> [Optional Arguments]
+
+        GI performs a comparison among 4 groups of datasets, strain A and B assessed in conditions 1 and 2 (e.g. control vs treatment).
+        It looks for interactions where the response to the treatment (i.e. effect on insertion counts) depends on the strain (output variable: delta_LFC).
+        Provide replicates in each group as a comma-separated list of wig files.
+        Significant interactions are those with "HDI outside ROPE?"=TRUE, and all genes are sorted by significance using BFDR."
 
         Optional Arguments:
         -s <integer>    :=  Number of samples. Default: -s 10000
@@ -901,8 +915,8 @@ class GIMethod(base.QuadConditionMethod):
         -n <string>     :=  Normalization method. Default: -n TTR
         -iz             :=  Include rows with zero accross conditions.
         -l              :=  Perform LOESS Correction; Helps remove possible genomic position bias. Default: Turned Off.
-        -iN <float>     :=  Ignore TAs occuring at given fraction of the N terminus. Default: -iN 0.0
-        -iC <float>     :=  Ignore TAs occuring at given fraction of the C terminus. Default: -iC 0.0
+        -iN <float>     :=  Ignore TAs occuring at given percentage (as integer) of the N terminus. Default: -iN 0
+        -iC <float>     :=  Ignore TAs occuring at given percentage (as integer) of the C terminus. Default: -iC 0
         """ % (sys.argv[0])
 
 
@@ -919,8 +933,8 @@ if __name__ == "__main__":
     G.console_message("Printing the member variables:")
     G.print_members()
 
-    print ""
-    print "Running:"
+    print("")
+    print("Running:")
 
     G.Run()
 
