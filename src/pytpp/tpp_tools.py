@@ -543,7 +543,7 @@ def read_counts(ref,sam,vars):
     sites_dict = {}
     sam_header = parse_sam_header(sam)
     replicon_names = get_replicon_names_from_sam_header(sam_header)
-    
+
     for replicon_names_index in range(vars.num_replicons):
         sites = {}
         genome = read_genome(ref, replicon_names_index)
@@ -589,8 +589,15 @@ def read_counts(ref,sam,vars):
     results_list = []
     for replicon_index in range(vars.num_replicons):
         results = []
-        for key in sorted(sites_dict[replicon_names[replicon_index]].keys()):
-            results.append(sites_dict[replicon_names[replicon_index]][key])
+        try:
+            stuff = sites_dict[replicon_names[replicon_index]]
+        except KeyError:
+            print("Replicon not found: {}".format(replicon_names[replicon_index]), file=sys.stderr)
+            sys.stderr.flush()
+            results_list.append([[-1] * 7])
+            continue
+        for key in sorted(stuff.keys()):
+            results.append(stuff[key])
         results_list.append(results)
     return results_list # list of (coord, Fwd_Rd_Ct, Fwd_Templ_Ct, Rev_Rd_Ct, Rev_Templ_Ct, Tot_Rd_Ct, Tot_Templ_Ct)
 
@@ -1044,7 +1051,8 @@ def generate_output(vars):
   for replicon_index in range(vars.num_replicons):
     tcfile = open(vars.tc[replicon_index],"w")
     tcfile.write('\t'.join("coord Fwd_Rd_Ct Fwd_Templ_Ct Rev_Rd_Ct Rev_Templ_Ct Tot_Rd_Ct Tot_Templ_Ct".split())+"\n")
-    for data in counts[replicon_index]: tcfile.write('\t'.join([str(x) for x in data])+"\n")
+    if replicon_index in counts:
+        for data in counts[replicon_index]: tcfile.write('\t'.join([str(x) for x in data])+"\n")
     tcfile.close()
 
     if vars.mapped == 0:
