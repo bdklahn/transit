@@ -723,7 +723,8 @@ def read_counts(ref, sam, vars):
 
 
 def driver(vars):
-    # JSP: Control the verbosity of BWA.
+    # JSP: Control the verbosity of BWA
+    # Works only on bwa mem
     # -v INT verbosity level: 1=error, 2=warning, 3=message, 4+=debugging [3]
     vars.verbose = "2"
     # [RJ] These variables are for the extract_reads() step (no reference genome involved)
@@ -1031,7 +1032,9 @@ def run_bwa(vars):
         cmd = [vars.bwa, "index", vars.ref]
         bwa_subprocess(cmd, sys.stdout)
 
-    cmd = [vars.bwa, vars.bwa_alg, "-v", vars.verbose]
+    cmd = [vars.bwa, vars.bwa_alg]
+    if vars.bwa_alg == "mem":
+        cmd += ["-v", vars.verbose]
     if vars.flags.strip():
         cmd.extend(vars.flags.split(" "))
     cmd.extend([vars.ref, vars.trimmed1])
