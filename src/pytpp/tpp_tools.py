@@ -1281,9 +1281,8 @@ def generate_output(vars):
             )
             + "\n"
         )
-        if replicon_index in counts:
-            for data in counts[replicon_index]:
-                tcfile.write("\t".join([str(x) for x in data]) + "\n")
+        for data in counts[replicon_index]:
+            tcfile.write("\t".join([str(x) for x in data]) + "\n")
         tcfile.close()
 
         if vars.mapped == 0:
