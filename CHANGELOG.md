@@ -1,6 +1,137 @@
 # Change log
 All notable changes to this project will be documented in this file.
 
+
+## Version 3.3.4 (2024-02-16)
+#### Transit:
+
+Minor changes:
+ - some improvements to ttnfitness
+
+
+## Version 3.3.3 (2023-11-26)
+#### Transit:
+
+Major changes:
+ - changed the calculation of HMM confidence scores in HMM_conf.py to use 1D distributions over Mean insertion counts for each gene for each essentiality state
+ - fixed bug in LOESS correction
+
+
+## Version 3.3.2 (2023-10-29)
+#### Transit:
+
+Major changes:
+ - added src/HMM_conf.py as a post-processing script for the HMM, to evaluate confidence of essentiality calls for each gene (see documentation on HMM)
+
+Minor changes:
+ - improvements to documentation related to Quality Control
+
+## Version 3.3.1 (2023-10-18)
+#### Transit:
+
+Minor changes:
+ - changed HMM output filenames to *.sites.txt and *.genes.txt
+ - added a page on File Formats to documentation
+ - added a page on Example Scripts to documentation (for developers, to illustrate use of pytransit package)
+
+
+## Version 3.3.0 (2023-08-03)
+#### Transit:
+
+Major changes:
+ - added CRISPRi-DR method for identifying chemical-genetic interactions (CGI) in CRISPRi libraries
+
+
+## Version 3.2.8 (2023-07-22)
+#### TPP:
+
+Small bug fixes:
+ - fixed uncompression of gzipped fastq files
+ - fixed error condition caused by recent versions of wxPython that require 'proportion' arg in sizers in TPP GUI to be int (not float)
+ - added link in documentation to make users aware of Transit2
+
+
+## Version 3.2.7 (2022-09-22)
+#### TRANSIT:
+
+Major changes:
+ - implemented site-restricted (S-R) resampling (as a checkbox in the GUI, and '-sr' flag on the command line)
+
+
+## Version 3.2.6 2022-08-03
+#### TRANSIT:
+
+Major changes:
+ - added a parameter 'alpha' to ANOVA to make the F-test less sensitive to genes with low counts, cutting down on 'irrelevant' genes with significant variability
+ - updated the online documentation to describe this
+
+Minor changes:
+ - fixed a (recently-introduced) bug that was causing the GUI to crash when running resampling
+ - updated 'export combined_wig' to include ref genome and column headers
+
+
+## Version 3.2.5 2022-06-15
+#### TRANSIT:
+
+Minor changes:
+ - update dependencies for pillow and sklearn
+ - refactor documentation (replace transit_methods.rst with separate .rst files)
+ - added rpy2 warning (if not installed) for corrplot and heatmap
+
+
+## Version 3.2.4 2022-06-05
+#### TRANSIT:
+
+Major changes:
+ - added 'ttnfitness' analysis method (to categorize growth-defect genes in single (reference) conditions, and compute TTN-fitness ratio to quantify the magnitude of growth defect based on comparison of observed insertion counts to expected counts at each TA site (based on surrounding nucleotides)
+ - added winzorization (-winz flag) to resampling, ANOVA, and ZINB (to help mitigate effects due to sites with outlier counts)
+ - fixed bug in ANOVA that assumed files in combined_wig and metadata were listed in same order (now they don't have to be)
+
+Minor changes:
+ - switched back to original implementation of mmfind() 
+ - added pathway assocation files for M. smegmatis to data dir 
+ - added --Pval_col and --Qval_col to pathway_enrichment.py 
+ - added --prot_table flag to zinb.py
+ - updated header info in output files for HMM, resampling, and ZINB
+ - updated explanation of -signif in documentation for Genetic Interactions
+ - cleaned up documentation
+
+	
+## Version 3.2.3 2021-10-16
+#### TRANSIT:
+  - added Binomial essentials (EB) to Gumbel analysis (supplementing genes categorized as E), to help with low-saturation datasets
+  - modified ANOVA and ZINB so that --include-conditions and --exclude-conditions refer to original Conditions column in samples metadata file (instead of whatever is specified by --conditions) 
+	
+#### TPP:
+  - improved metrics reported in *.tn_stats by TPP, to help diagnose why reads don't map
+	
+## Version 3.2.2 2021-09-08
+#### TRANSIT:
+ - fixed bug in converting gff_to_prot_table
+ - fixed bug in tn5gaps (fixes some false negative calls)
+ - fixed some bugs in pathway_enrichment (GSEA calculations)
+ - fixed links to Salmonella Tn5 data in docs
+ - fixed problem with margins in heatmap.py that was causing R to fail 
+ - added --ref to anova.py and zinb.py (for computing LFCs relative to designated reference condition)
+ - added --low_mean_filter for heatmap.py (for excluding genes with low counts, even if they are significant by ANOVA or ZINB)
+ - add dependency on pypubsub<4.0
+	
+## Version 3.2.1 2020-12-22
+#### TRANSIT:
+ - maintenance release
+  - fixed a bug in the GUI caused by changes in wxPython 4.1.0
+  - added GO terms for M. smegmatis in the data directory for doing pathway analysis
+
+## Version 3.2.0 2020-10-26
+#### TRANSIT:
+ - improvements to pathway_enrichment analysis
+  - added '--ranking' flag for GSEA to sort genes based on LFC or SLPV
+  - implemented Ontologizer method (-M ONT), which works better for GO terms
+  - updated auxilliary files in transit data directory for different systems of functional categories (COG, Sanger, GO)
+ - added '-signif' flag to GI (Genetic Interaction analysis) (options: HDI, prob, BFDR, FWER)
+  - updated description of methods for determining significant interactions in documentation
+ - various improvements to other methods, including corrplot and heatmap
+
 ## Version 3.1.0 2020-03-08
 #### TRANSIT:
  - added 'corrplot' and 'heatmap' commands

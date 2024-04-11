@@ -194,7 +194,24 @@ def fix_paired_headers_for_bwa(reads1, reads2):
   else:
 	  os.system("mv %s %s"%(temp1, reads1))
 	  os.system("mv %s %s" % (temp2, reads2))
-  """
+  '''
+
+##############################
+
+# original implementation
+# find index of H[1..m] in G[1..n] with up to max mismatches
+# note: this find first match, not necessarily the best (with min mismatches)
+
+def mmfind1(G,n,H,m,max): # lengths; assume n>m
+  a = G[:n].find(H[:m])
+  if a!=-1: return a # shortcut for perfect matches
+  for i in range(0,n-m):
+    cnt = 0
+    for k in range(m):
+      if G[i+k]!=H[k]: cnt += 1
+      if cnt>max: break
+    if cnt<=max: return i
+  return -1
 
 
 # checks for a match allowing 1 or 2 mismatches
@@ -245,11 +262,10 @@ def bit_parallel_with_max_1_error(text, pattern, m):
             return 1, j - m + 1
     return -1, -1
 
-
 # this function is a replacement for below mmfind() for speedup
 # it assumes the length of H is <32
 # find index of H[1..m] in G[1..n] with up to max (1 or 2) mismatches
-def mmfind(G, n, H, m, max):  # lengths; assume n>m
+def mmfind2(G,n,H,m,max): # lengths; assume n>m
     a = G.find(H)
     if a != -1:
         return a  # shortcut for perfect matches
@@ -263,21 +279,13 @@ def mmfind(G, n, H, m, max):  # lengths; assume n>m
     return -1
 
 
-""" replaced with above mmfind()
-# find index of H[1..m] in G[1..n] with up to max mismatches
+# TRI (10/20/2021): I switched back to mmfind1(), since 
+#   mmfind2() wasn't working right; increasing -mismatches caused fewer reads to be recognized with prefix and trimmed
 
-def mmfind(G,n,H,m,max): # lengths; assume n>m
-  a = G[:n].find(H[:m])
-  if a!=-1: return a # shortcut for perfect matches
-  for i in range(0,n-m):
-    cnt = 0
-    for k in range(m):
-      if G[i+k]!=H[k]: cnt += 1
-      if cnt>max: break
-    if cnt<=max: return i
-  return -1
-"""
 
+def mmfind(G,n,H,m,max): return mmfind1(G,n,H,m,max)
+
+##############################
 
 def windowize(
     origin, window_size
@@ -307,79 +315,59 @@ def extract_staggered(infile, outfile, vars):
         origin = 28 - len(Tn)
         P, Q = windowize(origin, vars.window_size)
 
-    if vars.barseq_catalog_out != None:
-        P, Q = 0, 100  # relax for barseq
-    vars.tot_tgtta = 0
-    vars.truncated_reads = 0
-    output = open(outfile, "w")
-    output_failed = open(outfile + "_failed_trim", "w")  # [WM] [add]
-    if vars.window_size != -1:
-        message(
-            "Looking for start of Tn prefix with P,Q = %d,%d (origin = %d, window size = %d)"
-            % (P, Q, origin, vars.window_size)
-        )  # [RJ] Outputting P,Q values and origin/window size
-    else:
-        message("Looking for start of Tn prefix within P,Q = [%d,%d]" % (P, Q))
-    tot = 0
-    # print(infile)
-    if vars.barseq_catalog_out != None:
-        barcodes_file = vars.base + ".barseq"  # I could define this in vars
-        catalog = open(barcodes_file, "w")
-        barseq1 = "TGCAGGGATGTCCACGAGGTCTCT"  # const regions surrounding barcode
-        barseq2 = "CGTACGCTGCAGGTCGACGGCCGG"
-        barseq1len, barseq2len = len(barseq1), len(barseq2)
-    for line in open(infile):
-        # print(line)
-        line = line.rstrip()
-        if not line:
-            continue
-        if line[0] == ">":
-            header = line
-            continue
-        tot += 1
-        if tot % 1000000 == 0:
-            message("%s reads processed" % tot)
-        readlen = len(line)
-        a = mmfind(line, readlen, Tn, lenTn, vars.mm1)  # allow some mismatches
-        b = mmfind(line, readlen, ADAPTER2, lenADAP, 1)  # look for end of short frags
-        if a >= P and a <= Q:
-            gstart, gend = a + lenTn, readlen
-            if b != -1:
-                gend = b
-                vars.truncated_reads += 1
-            minReadLen = 15 if vars.protocol.lower() == "mme1" else 20
-            if gend - gstart < minReadLen:
-                continue  # too short # I should make this a param
-            output.write(header + "\n")
-            output.write(line[gstart:gend] + "\n")
-            vars.tot_tgtta += 1
-        else:  # [WM] [add]
-            # Output reads that failed to be trimmed.          # [WM] [add]
-            output_failed.write(header + "\n")  # [WM] [add]
-            output_failed.write(line + "\n")  # [WM] [add]
-        if vars.barseq_catalog_out != None:
-            n = max(a, readlen)
-            c = mmfind(
-                line, n, barseq1, barseq1len, vars.mm1
-            )  # only have to search as far as Tn prefix
-            d = mmfind(line, n, barseq2, barseq2len, vars.mm1)
-            seq = "XXXXXXXXXXXXXXXXXXXX"
-            if c != -1 and d != -1:
-                size = d - c - barseq1len
-                if size >= 15 and size <= 25:
-                    seq = line[c + barseq1len : d]
-            catalog.write(header + "\n")
-            catalog.write(seq + "\n")
-    if vars.barseq_catalog_out != None:
-        catalog.close()
-    output.close()
-    output_failed.close()  # [WM] [add]
-    if vars.tot_tgtta == 0:
-        raise ValueError(
-            "Error: Input files did not contain any reads matching prefix sequence with %d mismatches"
-            % vars.mm1
-        )
-
+  if vars.barseq_catalog_out!=None: P,Q = 0,100 # relax for barseq
+  vars.tot_tgtta = 0
+  vars.truncated_reads = 0
+  output = open(outfile,"w")
+  output_failed = open(outfile+'_failed_trim',"w")                          # [WM] [add]
+  if vars.window_size!=-1: message("Looking for start of Tn prefix with P,Q = %d,%d (origin = %d, window size = %d)" % (P,Q,origin,vars.window_size)) # [RJ] Outputting P,Q values and origin/window size
+  else: message("Looking for start of Tn prefix within P,Q = [%d,%d]" % (P,Q))
+  tot = 0
+  #print(infile)
+  if vars.barseq_catalog_out!=None:
+    barcodes_file = vars.base+".barseq" # I could define this in vars
+    catalog = open(barcodes_file,"w")
+    barseq1 = "TGCAGGGATGTCCACGAGGTCTCT" # const regions surrounding barcode
+    barseq2 = "CGTACGCTGCAGGTCGACGGCCGG"
+    barseq1len,barseq2len = len(barseq1),len(barseq2)
+  for line in open(infile):
+    #print(line)
+    line = line.rstrip()
+    if not line: continue
+    if line[0]=='>': header = line; continue
+    tot += 1
+    if tot%1000000==0: message("%s reads processed" % tot)
+    readlen = len(line)
+    a = mmfind(line,readlen,Tn,lenTn,vars.mm1) # allow some mismatches
+    b = mmfind(line,readlen,ADAPTER2,lenADAP, 1) # look for end of short frags
+    if a>=P and a<=Q:
+      gstart,gend = a+lenTn,readlen
+      if b!=-1: gend = b; vars.truncated_reads += 1
+      minReadLen = 15 if vars.protocol.lower() == "mme1" else 20
+      if gend-gstart < minReadLen: continue # too short # I should make this a param
+      output.write(header+"\n")
+      output.write(line[gstart:gend]+"\n")
+      vars.tot_tgtta += 1
+    else:                                               # [WM] [add]
+      #Output reads that failed to be trimmed.          # [WM] [add]
+      output_failed.write(header+"\n")                  # [WM] [add]
+      output_failed.write(line+"\n")                    # [WM] [add]
+    if vars.barseq_catalog_out!=None:
+      n = max(a,readlen)
+      c = mmfind(line,n,barseq1,barseq1len,vars.mm1) # only have to search as far as Tn prefix
+      d = mmfind(line,n,barseq2,barseq2len,vars.mm1)
+      seq = "XXXXXXXXXXXXXXXXXXXX"
+      if c!=-1 and d!=-1:
+        size = d-c-barseq1len
+        if size>=15 and size<=25: seq = line[c+barseq1len:d]
+      catalog.write(header+"\n")
+      catalog.write(seq+"\n")
+  if vars.barseq_catalog_out!=None: catalog.close()
+  output.close()
+  output_failed.close()                                 # [WM] [add]
+  if vars.tot_tgtta == 0:
+    raise ValueError("Error: Input files did not contain any reads matching prefix sequence with %d mismatches" % vars.mm1)
+  vars.tot_reads = tot
 
 def message(s):
     # print("[tn_preprocess]",s)
@@ -601,33 +589,24 @@ def template_counts(ref, sam, bcfile, vars):
                     hits[replicon_name][pos] = []
                 hits[replicon_name][pos].append((strand, size, bc))
 
-    sites_list = []
-    for replicon_index in range(vars.num_replicons):
-        sites = []
-        genome = read_genome(ref, replicon_index)
-        for i in range(len(genome) - 1):
-            # if genome[i:i+2].upper()=="TA":
-            if vars.transposon == "Himar1" and genome[i : i + 2].upper() != "TA":
-                continue
-            else:
-                pos = i + 1
-                h = hits[replicon_names[replicon_index]].get(pos, [])
-                f = list(filter(lambda x: x[0] == "F", h))
-                r = list(filter(lambda x: x[0] == "R", h))
-                u = list(set(h))
-                uf = list(filter(lambda x: x[0] == "F", u))
-                ur = list(filter(lambda x: x[0] == "R", u))
-                data = [
-                    pos,
-                    len(f),
-                    len(uf),
-                    len(r),
-                    len(ur),
-                    len(f) + len(r),
-                    len(uf) + len(ur),
-                ]
-                sites.append(data)
-        sites_list.append(sites)
+  sites_list = []
+  for replicon_index in range(vars.num_replicons):
+    sites = []
+    genome = read_genome(ref, replicon_index)
+    for i in range(len(genome)-1):
+      #if genome[i:i+2].upper()=="TA":
+      if vars.transposon=="Himar1" and genome[i:i+2].upper()!="TA": continue 
+      else:
+        pos = i+1
+        h = hits[replicon_names[replicon_index]].get(pos,[])
+        f = list(filter(lambda x: x[0]=='F',h))
+        r = list(filter(lambda x: x[0]=='R',h))
+        u = list(set(h))
+        uf = list(filter(lambda x: x[0]=='F',u))
+        ur = list(filter(lambda x: x[0]=='R',u))
+        data = [pos,len(f),len(uf),len(r),len(ur),len(f)+len(r),len(uf)+len(ur)]
+        sites.append(data)    
+    sites_list.append(sites)
 
     return sites_list  # list of (coord, Fwd_Rd_Ct, Fwd_Templ_Ct, Rev_Rd_Ct, Rev_Templ_Ct, Tot_Rd_Ct, Tot_Templ_Ct)
 
@@ -824,11 +803,11 @@ def driver(vars):
 
         generate_output(vars)
 
-    except ValueError as err:
-        message("")
-        message("%s" % " ".join(err.args))
-        message("Exiting.")
-        sys.exit()
+  except ValueError as err:
+    message("")
+    message(err.args)
+    message("Exiting.")
+    sys.exit()
 
     except IOError as err:
         message("")
@@ -846,12 +825,15 @@ def driver(vars):
 
     message("Done.")
 
+# gunzip <fastq>.gz file, written to <fastq>
 
 def uncompress(filename):
-    outfil = open(filename[0:-3], "w+")
-    for line in gzip.open(filename):
-        outfil.write(line)
-    return filename[0:-3]
+   newfname = filename[0:-3]
+   print("uncompressing %s" % filename)
+   outfil = open(newfname, "wb+")
+   for line in gzip.open(filename):
+      outfil.write(line)
+   return newfname
 
 
 def copy_fasta(infile, outfile, maxreads=-1):
@@ -875,10 +857,16 @@ def copy_fasta(infile, outfile, maxreads=-1):
 def extract_reads(vars):
     message("extracting reads...")
 
-    flag = ["", ""]
+    if vars.fq1.endswith('.gz'):
+       vars.fq1 = uncompress(vars.fq1)
+
+    if vars.fq2.endswith('.gz'):
+       vars.fq2 = uncompress(vars.fq2)
+
+    flag = ['','']
     for idx, name in enumerate([vars.fq1, vars.fq2]):
-        if idx == 1 and vars.single_end == True:
-            continue
+        print(name)
+        if idx==1 and vars.single_end==True: continue
         fil = open(name)
         for line in fil:
             if line[0] == ">":
@@ -888,15 +876,9 @@ def extract_reads(vars):
             break
         fil.close()
 
-    if vars.fq1.endswith(".gz"):
-        vars.fq1 = uncompress(vars.fq1)
-
-    if vars.fq2.endswith(".gz"):
-        vars.fq2 = uncompress(vars.fq2)
-
-    if flag[0] == "FASTQ":
-        message("fastq2reads: %s -> %s" % (vars.fq1, vars.reads1))
-        fastq2reads(vars.fq1, vars.reads1, vars.maxreads)
+    if(flag[0] == 'FASTQ'):
+        message("fastq2reads: %s -> %s" % (vars.fq1,vars.reads1))
+        fastq2reads(vars.fq1,vars.reads1,vars.maxreads)
     else:
         # shutil.copyfile(vars.fq1, vars.reads1)
         copy_fasta(vars.fq1, vars.reads1, vars.maxreads)
@@ -1346,57 +1328,31 @@ def generate_output(vars):
         FR_corr.append(cur_FR_corr)
         BC_corr.append(cur_BC_corr)
 
-    primer = "CTAGAGGGCCCAATTCGCCCTATAGTGAGT"
-    vector = "CTAGACCGTCCAGTCTGGCAGGCCGGAAAC"
-    adapter = "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
-    Himar1 = "ACTTATCAGCCAACCTGTTA"
-    tot_reads, nprimer, nvector, nadapter, misprimed = 0, 0, 0, 0, 0
-    for line in open(vars.reads1):
-        if line[0] == ">":
-            tot_reads += 1
-            continue
-        if primer in line:
-            nprimer += 1
-        if vector in line:
-            nvector += 1
-        if adapter in line:
-            nadapter += 1
-        # if "TGTTA" in line and Himar1 not in line: misprimed += 1
-        # basically, these should correspond to insertions at non-TA sites (so the terminal TA of ...TGTTA will be different)
-        if Himar1[:-5] in line and Himar1 not in line:
-            misprimed += 1
+  tot_reads = vars.tot_reads
+  read_length = get_read_length(vars.base + ".reads1")
+  mean_r1_genomic = get_genomic_portion(vars.base + ".trimmed1")
+  if vars.single_end==False: mean_r2_genomic = get_genomic_portion(vars.base + ".genomic2")
 
-    read_length = get_read_length(vars.base + ".reads1")
-    mean_r1_genomic = get_genomic_portion(vars.base + ".trimmed1")
-    if vars.single_end == False:
-        mean_r2_genomic = get_genomic_portion(vars.base + ".genomic2")
-
-    output = open(vars.stats, "w")
-    version = "1.0"
-    # output.write("# title: Tn-Seq Pre-Processor, version %s\n" % vars.version)
-    output.write("# title: Tn-Seq Pre-Processor\n")
-    output.write("# date: %s\n" % time.strftime("%m/%d/%Y %H:%M:%S"))
-    output.write("# command: python ")
-    output.write(" ".join(sys.argv) + "\n")
-    output.write("# transposon type: %s\n" % vars.transposon)
-    output.write("# protocol type: %s\n" % vars.protocol)
-    output.write("# bwa flags: %s\n" % vars.flags)
-    output.write("# read1: %s\n" % vars.fq1)
-    output.write("# read2: %s\n" % vars.fq2)
-    output.write("# ref_genome: %s\n" % vars.ref)
-    output.write("# replicon_ids: %s\n" % ",".join(vars.replicon_ids))
-    output.write("# total_reads (or read pairs): %s\n" % tot_reads)
-    # output.write("# truncated_reads %s (fragments shorter than the read length; ADAP2 appears in read1)\n" % vars.truncated_reads)
-    output.write(
-        "# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): %s\n"
-        % vars.tot_tgtta
-    )
-    output.write("# reads1_mapped: %s\n" % vars.r1)
-    output.write("# reads2_mapped: %s\n" % vars.r2)
-    output.write(
-        "# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): %s \n"
-        % vars.mapped
-    )
+  output = open(vars.stats,"w")
+  version = "1.0"
+  #output.write("# title: Tn-Seq Pre-Processor, version %s\n" % vars.version)
+  output.write("# title: Tn-Seq Pre-Processor\n")
+  output.write("# date: %s\n" % time.strftime("%m/%d/%Y %H:%M:%S"))
+  output.write("# command: python ")
+  output.write(' '.join(sys.argv)+"\n")
+  output.write('# transposon type: %s\n' % vars.transposon)
+  output.write('# protocol type: %s\n' % vars.protocol)
+  output.write('# bwa flags: %s\n' % vars.flags)
+  output.write('# read1: %s\n' % vars.fq1)
+  output.write('# read2: %s\n' % vars.fq2)
+  output.write('# ref_genome: %s\n' % vars.ref)
+  output.write('# replicon_ids: %s\n' % ','.join(vars.replicon_ids))
+  output.write("# total_reads (or read pairs): %s\n" % tot_reads)
+  output.write("# truncated_reads %s (genomic inserts shorter than the read length; ADAP2 appears in read1)\n" % vars.truncated_reads)
+  output.write("# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): %s\n" % vars.tot_tgtta)
+  output.write("# reads1_mapped: %s\n" % vars.r1)
+  output.write("# reads2_mapped: %s\n" % vars.r2)
+  output.write("# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): %s \n" % vars.mapped)
 
     if vars.num_replicons > 1:
         output.write("# read_count (TA sites only, for Himar1):\n")
@@ -1451,26 +1407,33 @@ def generate_output(vars):
             % BC_corr[0]
         )
 
-    output.write(
-        "# primer_matches: %s reads (%0.1f%%) contain %s (Himar1)\n"
-        % (nprimer, nprimer * 100 / float(tot_reads), primer)
-    )
-    output.write(
-        "# vector_matches: %s reads (%0.1f%%) contain %s (phiMycoMarT7)\n"
-        % (nvector, nvector * 100 / float(tot_reads), vector)
-    )
-    output.write(
-        "# adapter_matches: %s reads (%0.1f%%) contain %s (Illumina/TruSeq index)\n"
-        % (nadapter, nadapter * 100 / float(tot_reads), adapter)
-    )
-    output.write(
-        "# misprimed_reads: %s reads (%0.1f%%) contain Himar1 prefix but don't end in TGTTA\n"
-        % (misprimed, misprimed * 100 / float(tot_reads))
-    )
-    output.write("# read_length: %s bp\n" % read_length)
-    output.write("# mean_R1_genomic_length: %0.1f bp\n" % mean_r1_genomic)
-    if vars.single_end == False:
-        output.write("# mean_R2_genomic_length: %0.1f bp\n" % mean_r2_genomic)
+  primer = "CTAGAGGGCCCAATTCGCCCTATAGTGAGT"
+  vector = "CTAGACCGTCCAGTCTGGCAGGCCGGAAAC"
+  adapter = "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
+  ADAPTER2 = "TACCACGACCA" # rc of const2 region of R2, between barcode and genomic; these reads will be truncated here
+  Himar1 = "ACTTATCAGCCAACCTGTTA"
+  trimmed_reads,nprimer,nvector,nadapter,misprimed,ntruncated = 0,0,0,0,0,0
+  for line in open(vars.trimmed1):
+    if line[0]=='>': trimmed_reads += 1; continue
+    if primer in line: nprimer += 1
+    if vector in line: nvector += 1
+    if adapter in line: nadapter += 1
+    #if "TGTTA" in line and Himar1 not in line: misprimed += 1
+    # basically, these should correspond to insertions at non-TA sites (so the terminal TA of ...TGTTA will be different)
+    if Himar1[:-5] in line and Himar1 not in line: misprimed += 1 
+
+  output.write("# Break-down of total reads (%s):\n" % tot_reads)
+  output.write("#  %s reads (%0.1f%%) lack the expected Tn prefix\n" % (tot_reads-vars.tot_tgtta,(tot_reads-vars.tot_tgtta)*100/float(tot_reads)))
+
+  output.write("# Break-down of trimmed reads with valid Tn prefix (%s):\n" % trimmed_reads)
+  output.write("#  primer_matches: %s reads (%0.1f%%) contain %s (Himar1)\n" % (nprimer,nprimer*100/float(trimmed_reads),primer))
+  output.write("#  vector_matches: %s reads (%0.1f%%) contain %s (phiMycoMarT7)\n" % (nvector,nvector*100/float(trimmed_reads),vector))
+  output.write("#  adapter_matches: %s reads (%0.1f%%) contain %s (Illumina/TruSeq index)\n" % (nadapter,nadapter*100/float(trimmed_reads),adapter))
+  output.write("#  misprimed_reads: %s reads (%0.1f%%) contain Himar1 prefix but don't end in TGTTA\n" % (misprimed,misprimed*100/float(trimmed_reads)))
+
+  output.write("# read_length: %s bp\n" % read_length)
+  output.write("# mean_R1_genomic_length: %0.1f bp\n" % mean_r1_genomic)
+  if vars.single_end==False: output.write("# mean_R2_genomic_length: %0.1f bp\n" % mean_r2_genomic)
 
     output.close()
 

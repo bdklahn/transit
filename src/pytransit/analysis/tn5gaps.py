@@ -134,28 +134,16 @@ class Tn5GapsGUI(base.AnalysisGUI):
         mainSizer1 = wx.BoxSizer(wx.VERTICAL)
 
         # Min Read
-        tn5GapsReadChoiceChoices = [u"1", u"2", u"3", u"4", u"5"]
-        (
-            tn5GapsReadLabel,
-            self.wxobj.tn5GapsReadChoice,
-            readSizer,
-        ) = self.defineChoiceBox(
-            tn5GapsPanel,
-            u"Minimum Read:",
-            tn5GapsReadChoiceChoices,
-            "This is the minimum number of reads to consider a 'true' insertion. Value of 1 will consider all insertions. Larger values allow the method to ignore spurious insertions which might interrupt a run of non-insertions. Noisy datasets or those with many replicates can beneffit from increasing this.",
-        )
-        mainSizer1.Add(readSizer, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND, 5)
+        tn5GapsReadChoiceChoices = [ u"1", u"2", u"3", u"4", u"5" ]
+        (tn5GapsReadLabel, self.wxobj.tn5GapsReadChoice, readSizer) = self.defineChoiceBox(tn5GapsPanel, u"Minimum Read:", tn5GapsReadChoiceChoices, "This is the minimum number of reads to consider a 'true' insertion. Value of 1 will consider all insertions. Larger values allow the method to ignore spurious insertions which might interrupt a run of non-insertions. Noisy datasets or those with many replicates can beneffit from increasing this.")
+        mainSizer1.Add(readSizer, 1, wx.EXPAND, 5 )
+   
 
         # Replicates
-        tn5GapsRepChoiceChoices = [u"Sum", u"Mean"]
-        (tn5GapsRepLabel, self.wxobj.tn5GapsRepChoice, repSizer) = self.defineChoiceBox(
-            tn5GapsPanel,
-            u"Replicates:",
-            tn5GapsRepChoiceChoices,
-            "Determines how to handle replicates, and their read-counts. When using many replicates, summing read-counts may make spurious counts appear to be significantly large and interrupt a run of non-insertions.",
-        )
-        mainSizer1.Add(repSizer, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND, 5)
+        tn5GapsRepChoiceChoices = [ u"Sum", u"Mean" ]
+        (tn5GapsRepLabel, self.wxobj.tn5GapsRepChoice, repSizer) = self.defineChoiceBox(tn5GapsPanel, u"Replicates:", tn5GapsRepChoiceChoices, "Determines how to handle replicates, and their read-counts. When using many replicates, summing read-counts may make spurious counts appear to be significantly large and interrupt a run of non-insertions.")
+        mainSizer1.Add(repSizer, 1, wx.EXPAND, 5 )
+
 
         tn5GapsSection.Add(mainSizer1, 1, wx.EXPAND, 5)
 
@@ -315,9 +303,9 @@ class Tn5GapsMethod(base.SingleConditionMethod):
     def Run(self):
         self.transit_message("Starting Tn5 gaps method")
         start_time = time.time()
-
-        self.transit_message("Getting data (May take a while)")
-
+        
+        self.transit_message("Loading data (May take a while)")
+        
         # Combine all wigs
         (data, position) = transit_tools.get_validated_data(
             self.ctrldata, wxobj=self.wxobj
@@ -355,7 +343,7 @@ class Tn5GapsMethod(base.SingleConditionMethod):
         exp_cutoff = exprunmax + 2 * stddevrun
 
         # Get the runs
-        self.transit_message("Getting non-insertion runs in genome")
+        self.transit_message("Identifying non-insertion runs in genome")
         run_arr = tnseq_tools.runs_w_info(counts)
         pos_hash = transit_tools.get_pos_hash(self.annotation_path)
 
@@ -385,25 +373,20 @@ class Tn5GapsMethod(base.SingleConditionMethod):
             count += 1
             genes = tnseq_tools.get_genes_in_range(pos_hash, run["start"], run["end"])
             for gene_orf in genes:
-                start, end = gene.start, gene.end
-                a, b = self.NTerminus, self.CTerminus
-                if gene.strand == "-":
-                    a, b = b, a
-                start = start + int((end - start) * (a / 100.0))
-                end = end - int((end - start) * (b / 100.0))
+                gene = genes_obj[gene_orf] # bug fix: moved this up
+                start,end = gene.start,gene.end
+                a,b = self.NTerminus,self.CTerminus
+                if gene.strand=="-": a,b = b,a
+                start = start+int((end-start)*(a/100.))
+                end = end-int((end-start)*(b/100.))
 
-                gene = genes_obj[gene_orf]
-                inter_sz = (
-                    self.intersect_size([run["start"], run["end"]], [start, end]) + 1
-                )
-                percent_overlap = self.calc_overlap(
-                    [run["start"], run["end"]], [start, end]
-                )
-                run_len = run["length"]
-                B = 1.0 / math.log(1.0 / pnon)
-                u = math.log(num_sites * pins, 1.0 / pnon)
-                pval = 1.0 - tnseq_tools.GumbelCDF(run["length"], u, B)
-
+                inter_sz = self.intersect_size([run['start'], run['end']], [start,end]) + 1
+                percent_overlap = self.calc_overlap([run['start'], run['end']], [start,end])
+                run_len = run['length']
+                B = 1.0/math.log(1.0/pnon)
+                u = math.log(num_sites*pins, 1.0/pnon)
+                pval = 1.0 - tnseq_tools.GumbelCDF(run['length'], u, B)
+                
                 curr_val = results_per_gene[gene.orf]
                 curr_inter_sz = curr_val[6]
                 curr_len = curr_val[7]
@@ -421,8 +404,9 @@ class Tn5GapsMethod(base.SingleConditionMethod):
                     ]
 
             # Update Progress
-            text = "Running Tn5Gaps method... %1.1f%%" % (100.0 * count / N)
-            self.progress_update(text, count)
+            if count%10000==0: 
+              text = "Running Tn5Gaps method... %1.1f%%" % (100.0*count/N) 
+              self.progress_update(text, count)
 
         data = list(results_per_gene.values())
         exp_run_len = float(accum) / N
@@ -472,9 +456,10 @@ class Tn5GapsMethod(base.SingleConditionMethod):
         self.output.write("#Essential gene count: %d\n" % (sig_genes_count))
         self.output.write("#Minimum reads: %d\n" % (self.minread))
         self.output.write("#Replicate combination method: %s\n" % (self.replicates))
-        self.output.write("#Minimum significant run length: {}\n".format(min_sig_len))
-        self.output.write("#Expected run length: %1.5f\n" % (exp_run_len))
-        self.output.write("#Expected max run length: %s\n" % (exprunmax))
+        self.output.write("#Insertion density: %0.3f\n" % (pins))
+        self.output.write("#Mean run length: %0.1f\n" % (exp_run_len))
+        self.output.write("#Expected max run length: %0.1f\n" % (exprunmax))
+        self.output.write("#Minimum significant run length: %d\n" % (min_sig_len))
         self.output.write("#%s\n" % "\t".join(columns))
         # self.output.write("#Orf\tName\tDesc\tk\tn\tr\tovr\tlenovr\tpval\tpadj\tcall\n")
 

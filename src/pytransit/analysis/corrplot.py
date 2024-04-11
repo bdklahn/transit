@@ -106,6 +106,11 @@ class CorrplotMethod(base.SingleConditionMethod):
 
     @classmethod
     def fromargs(self, rawargs): 
+        if not hasR:
+            print("Error: R and rpy2 (~= 3.0) required to run corrplot.")
+            print("After installing R, you can install rpy2 using the command \"pip install 'rpy2~=3.0'\"")
+            sys.exit(0)
+
         (args, kwargs) = transit_tools.cleanargs(rawargs)
         if (kwargs.get('-help', False)): print(self.usage_string()); sys.exit(0)
         if len(args)<2: print(self.usage_string()); sys.exit(0)
@@ -141,7 +146,8 @@ class CorrplotMethod(base.SingleConditionMethod):
             if n==-1: 
               # ANOVA header line has names of conditions, organized as 3+2*n+3 (2 groups (means, LFCs) X n conditions)
               # ZINB header line has names of conditions, organized as 3+4*n+3 (4 groups X n conditions)
-              if self.filetype=="anova": n = int((len(w)-6)/2) 
+              # it would be better to read the column headers and look for "LFC_<cond>"
+              if self.filetype=="anova": n = int((len(w)-8)/2) 
               elif self.filetype=="zinb": n = int((len(headers)-6)/4) 
               headers = headers[3:3+n]
               headers = [x.replace("Mean_","") for x in headers]
@@ -154,6 +160,8 @@ class CorrplotMethod(base.SingleConditionMethod):
         genenames = ["%s/%s" % (w[0],w[1]) for w in data]
         hash = {}
         headers = [h.replace("Mean_","") for h in headers]
+        headers = [h.replace("-",".") for h in headers] # because of R conversion
+        headers = ["X"+x if x[0].isdigit() else x for x in headers] # because R prepends 'X' to column names starting with a digit
         for i,col in enumerate(headers): hash[col] = FloatVector([x[i] for x in means])
         df = DataFrame(hash) # can't figure out how to set rownames
 

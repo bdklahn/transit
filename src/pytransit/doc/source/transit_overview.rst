@@ -6,6 +6,9 @@ TRANSIT Overview
 ================
 
 
+The analysis methods in Transit are also described in this `PDF manual
+<https://orca1.tamu.edu/essentiality/transit/transit-manual.pdf>`_ .
+
 + This is a software that can be used to analyze Tn-Seq datasets. It includes various statistical calculations of essentiality of genes or genomic regions (including conditional essentiality between 2 conditions). These methods were developed and tested as a collaboration between the Sassetti lab (UMass) and the Ioerger lab (Texas A&M) [DeJesus2015TRANSIT]_.
 
 .. image:: _images/transit_interface.png
@@ -131,7 +134,7 @@ Development of TRANSIT is funded by the National Institutes of Health (www.nih.g
 
 
 
-Other references, including methods utilized by TRANSIT:
+Other references for methods utilized by TRANSIT:
 
 
 
@@ -153,3 +156,4 @@ Other references, including methods utilized by TRANSIT:
 
 .. [ZINB] `Subramaniyam S, DeJesus MA, Zaveri A, Smith CM, Baker RE, Ehrt S, Schnappinger D, Sassetti CM, Ioerger TR. (2019).  Statistical analysis of variability in TnSeq data across conditions using Zero-Inflated Negative Binomial regression. *BMC Bioinformatics*. 2019 Nov 21;20(1):603. doi: 10.1186/s12859-019-3156-z. <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-019-3156-z>`_
 
+.. [Choudhery2021] `Choudhery S, Brown AJ, Akusobi C, Rubin EJ, Sassetti CM, Ioerger TR. Modeling Site-Specific Nucleotide Biases Affecting Himar1 Transposon Insertion Frequencies in TnSeq Data Sets. *mSystems*. 2021 Oct 26;6(5):e0087621. doi: 10.1128/mSystems.00876-21. <https://pubmed.ncbi.nlm.nih.gov/34665010/>`_

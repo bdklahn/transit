@@ -4,28 +4,66 @@ See:
 https://packaging.python.org/en/latest/distributing.html
 https://github.com/pypa/sampleproject
 """
+import sys
+import os
+from os import path
+import glob
+import shutil
+from pathlib import Path
+from shutil import rmtree
 
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages, Command
 # To use a consistent encoding
 from codecs import open
-from os import path
-from shutil import rmtree
 
-import os
+sys.path.append("src")
+import pytransit
+from pytransit.generic_tools import file_system_py as FS
+version =  pytransit.__version__[1:]
 
-here = path.abspath(path.dirname(__file__))
+package_name = "pytransit"
 
+def file_exclusion_function(file_path):
+    """
+        Summary:
+            this is supposed to return True if the file should be excluded from the pypi upload
+            HOWEVER for some reason some files can still be included, partly because of the MANIFEST.in file
+            The process is rather mysterious
+            
+    """
+    # no folders
+    if os.path.isdir(file_path):
+        return True
+    
+    # no __pycache__ folders
+    if (
+        '/__pycache__/' in file_path
+        or file_path.startswith('__pycache__/')
+        or file_path.endswith('/__pycache__')
+    ):
+        return True
+        
+    # only .py, .json, and .yaml from the __dependencies__ folders
+    if '/__dependencies__/' in file_path and not (file_path.endswith(".py") or file_path.endswith(".json") or file_path.endswith(".yaml")):
+        return True
+    # no test files
+    if "/ruamel/yaml/_test/" in file_path:
+        return True
+    
+    if "/doc/" in file_path:
+        return True
+    
+    
+    return False
 
 # Get the long description from the README file
+here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 # Get current version
-import sys
 sys.path.insert(1, "src/")
-import pytransit
-version =  pytransit.__version__[1:]
 
 class UploadCommand(Command):
     """Support setup.py upload."""
@@ -46,7 +84,7 @@ class UploadCommand(Command):
 
     def yes_or_no(self, question):
         while True:
-            reply = str(raw_input(question +' (y/n): ')).lower().strip()
+            reply = str(input(question +' (y/n): ')).lower().strip()
             if reply == 'y':
                 return True
             return False
@@ -91,6 +129,15 @@ class UploadCommand(Command):
 
         sys.exit()
 
+package_data = {
+    # include all files/folders in the module (recursively)
+    package_name: sorted(list(set([
+        each[len(package_name)+1:]
+            for each in FS.iterate_paths_in(package_name, recursively=True)
+                if not file_exclusion_function(each)
+    ]))),
+}
+
 setup(
     name='tnseq-transit',
 
@@ -130,8 +177,6 @@ setup(
     # What does your project relate to?
     keywords=['tnseq', 'analysis', 'biology', 'genome'],
 
-    #package_dir = {'tnseq-transit': 'src/pytransit'},
-
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().
     packages = find_packages('src', exclude=['contrib', 'tests']),
@@ -148,7 +193,9 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['setuptools', 'numpy~=1.16', 'scipy~=1.2', 'matplotlib~=3.0', 'pillow~=6.0', 'statsmodels~=0.9'],
+    # 'pypubsub<4.0' and 'wxPython' are needed for GUI only, but go ahead and install them
+    # the reason for restriction on pypubsub is that version>=4.0 does not work with python2 - I can probably get rid of this restriction, since everybody must be using python3 by now
+    install_requires=['setuptools', 'numpy~=1.16', 'scipy~=1.2', 'matplotlib~=3.0', 'pillow', 'scikit-learn', 'statsmodels~=0.9', 'pypubsub', 'wxPython'],
 
     #dependency_links = [
     #	"git+https://github.com/wxWidgets/wxPython.git#egg=wxPython"
@@ -166,9 +213,7 @@ setup(
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
-    package_data={
-        'pytransit': ['pytransit/data/*', 'pytransit/doc/*.*', 'pytransit/doc/images/*', 'pytransit/genomes/*']
-    },
+    package_data=package_data,
 
     #scripts=['src/tpp.py', 'src/transit.py'],
 
@@ -191,4 +236,3 @@ setup(
         'upload': UploadCommand,
     },
 )
-

@@ -8,7 +8,22 @@ Welcome to TRANSIT's documentation!
     :target: https://github.com/mad-lab/transit
     :alt: GitHub last tag
 
-This page contains the documentation for TRANSIT. Below are a few quick links to some of the most important sections of the documentation, followed by a brief overview of TRANSIT's features.
+Transit is python-based software for analyzing TnSeq data
+(sequencing data from transposon mutant libraries)
+to determine essentiality of bacterial genes under different conditions.
+
+This page contains the documentation for TRANSIT. Below are a few
+quick links to some of the most important sections of the
+documentation, followed by a brief overview of TRANSIT's features.
+
+.. NOTE::
+
+  This documentation is for the original version of Transit.  We
+  recently released a new version of Transit called `TRANSIT2
+  <https://transit2.readthedocs.io/en/latest/>`_ (re-implementation
+  from scratch), which has most of the same TnSeq analytical methods,
+  but it has an enhanced GUI.  Nonetheless, this original version of
+  TRANSIT is still being maintained for backwards-compatibility.
 
 Quick Links
 ~~~~~~~~~~~
@@ -20,7 +35,7 @@ Quick Links
 * :ref:`tutorial-link`
 * :ref:`tpp-link`
 * :ref:`code-link`
-
+* `PDF manual with overview of analysis methods in Transit <https://orca1.tamu.edu/essentiality/transit/transit-manual.pdf>`_
 
 Features
 ~~~~~~~~
@@ -57,20 +72,39 @@ TRANSIT offers a variety of features including:
 .. _manual-link:
 
 .. toctree::
-   :maxdepth: 2
-   :caption: TRANSIT Manual
+   :maxdepth: 3
+   :caption: TRANSIT MANUAL
 
    transit_overview
    transit_install
    transit_running
-   transit_features
-   transit_methods
-   transit_console_cheatsheet
+   transit_quality_control
+   file_formats
+   
+.. toctree::
+   :maxdepth: 3
+   :caption: TnSeq ANALYSIS METHODS
+
+   method_normalization
+   method_tnseq_stats
+   method_gumbel
+   method_griffin
+   method_ttnfitness
+   method_tn5gaps
+   method_HMM
+   method_resampling
+   method_Utest
+   method_anova
+   method_corrplot
+   method_heatmap
+   method_GI
+   method_zinb
+   method_pathway_enrichment
 
 .. _tutorial-link:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: TRANSIT Tutorials
 
    transit_essentiality_tutorial
@@ -79,11 +113,12 @@ TRANSIT offers a variety of features including:
    transit_interactions_tutorial
    transit_normalization_tutorial
    transit_export_tutorial
+   transit_console_cheatsheet
 
 .. _tpp-link:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: TPP Manual
 
    tpp.rst
@@ -91,10 +126,11 @@ TRANSIT offers a variety of features including:
 .. _code-link:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Code Documentation
 
    transit
+   example_scripts
 
 * :ref:`genindex`
 * :ref:`modindex`

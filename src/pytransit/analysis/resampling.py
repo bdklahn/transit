@@ -16,12 +16,15 @@ if hasWx:
     from pubsub import pub
     import wx.adv
 
-import datetime
-import math
-import ntpath
 import os
-import random
 import time
+import ntpath
+import math
+import random
+import numpy
+import scipy.stats
+import datetime
+import heapq
 
 import numpy
 import pytransit
@@ -75,6 +78,7 @@ class ResamplingAnalysis(base.TransitAnalysis):
 
 
 class ResamplingFile(base.TransitFile):
+
     def __init__(self):
         base.TransitFile.__init__(self, "#Resampling", columns)
 
@@ -131,6 +135,7 @@ class ResamplingFile(base.TransitFile):
 
 
 class ResamplingGUI(base.AnalysisGUI):
+
     def definePanel(self, wxobj):
         self.wxobj = wxobj
         resamplingPanel = wx.Panel(
@@ -162,57 +167,25 @@ class ResamplingGUI(base.AnalysisGUI):
 
         mainSizer1 = wx.BoxSizer(wx.VERTICAL)
 
-        # (, , Sizer) = self.defineChoiceBox(resamplingPanel, u"", u"", "")
-        # mainSizer1.Add(Sizer, 1, wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND, 5 )
+        #(, , Sizer) = self.defineChoiceBox(resamplingPanel, u"", u"", "")
+        #mainSizer1.Add(Sizer, 1, wx.EXPAND, 5 )
 
         # Samples
-        (
-            resamplingSampleLabel,
-            self.wxobj.resamplingSampleText,
-            sampleSizer,
-        ) = self.defineTextBox(
-            resamplingPanel,
-            u"Samples:",
-            u"10000",
-            "Number of samples to take when estimating the resampling histogram. More samples give more accurate estimates of the p-values at the cost of computation time.",
-        )
-        mainSizer1.Add(sampleSizer, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND, 5)
+        (resamplingSampleLabel, self.wxobj.resamplingSampleText, sampleSizer) = self.defineTextBox(resamplingPanel, u"Samples:", u"10000", "Number of samples to take when estimating the resampling histogram. More samples give more accurate estimates of the p-values at the cost of computation time.")
+        mainSizer1.Add(sampleSizer, 1, wx.EXPAND, 5 )
 
         # Pseudocount - changing the semantics on 3/5/20
-        # (resamplingPseudocountLabel, self.wxobj.resamplingPseudocountText, pseudoSizer) = self.defineTextBox(resamplingPanel, u"Pseudocount:", u"0.0", "Adds pseudo-counts to the each data-point. Useful to dampen the effects of small counts which may lead to deceptively high log-FC.")
-        (
-            resamplingPseudocountLabel,
-            self.wxobj.resamplingPseudocountText,
-            pseudoSizer,
-        ) = self.defineTextBox(
-            resamplingPanel,
-            u"Pseudocount:",
-            u"0.0",
-            "Pseudo-counts used in calculating log-fold-chnage. Useful to dampen the effects of small counts which may lead to deceptively high LFC.",
-        )
-        mainSizer1.Add(pseudoSizer, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND, 5)
+        #(resamplingPseudocountLabel, self.wxobj.resamplingPseudocountText, pseudoSizer) = self.defineTextBox(resamplingPanel, u"Pseudocount:", u"0.0", "Adds pseudo-counts to the each data-point. Useful to dampen the effects of small counts which may lead to deceptively high log-FC.")
+        (resamplingPseudocountLabel, self.wxobj.resamplingPseudocountText, pseudoSizer) = self.defineTextBox(resamplingPanel, u"Pseudocount:", u"0.0", "Pseudo-counts used in calculating log-fold-chnage. Useful to dampen the effects of small counts which may lead to deceptively high LFC.")
+        mainSizer1.Add(pseudoSizer, 1, wx.EXPAND, 5 )
 
         # Norm
-        resamplingNormChoiceChoices = [
-            u"TTR",
-            u"nzmean",
-            u"totreads",
-            u"zinfnb",
-            u"quantile",
-            u"betageom",
-            u"nonorm",
-        ]
-        (
-            resamplingNormLabel,
-            self.wxobj.resamplingNormChoice,
-            normSizer,
-        ) = self.defineChoiceBox(
-            resamplingPanel,
-            u"Normalization: ",
-            resamplingNormChoiceChoices,
-            "Choice of normalization method. The default choice, 'TTR', normalizes datasets to have the same expected count (while not being sensative to outliers). Read documentation for a description other methods. ",
-        )
-        mainSizer1.Add(normSizer, 1, wx.ALIGN_CENTER_HORIZONTAL | wx.EXPAND, 5)
+        resamplingNormChoiceChoices = [ u"TTR", u"nzmean", u"totreads", u'zinfnb', u'quantile', u"betageom", u"nonorm" ]
+        (resamplingNormLabel, self.wxobj.resamplingNormChoice, normSizer) = self.defineChoiceBox(resamplingPanel, u"Normalization: ", resamplingNormChoiceChoices, "Choice of normalization method. The default choice, 'TTR', normalizes datasets to have the same expected count (while not being sensative to outliers). Read documentation for a description other methods. ")
+        mainSizer1.Add(normSizer, 1, wx.EXPAND, 5 )
+
+
+
 
         resamplingSizer.Add(mainSizer1, 1, wx.EXPAND, 5)
 
@@ -238,34 +211,25 @@ class ResamplingGUI(base.AnalysisGUI):
         resamplingSizer.Add(self.wxobj.resamplingLoessPrev, 0, wx.ALL | wx.CENTER, 5)
 
         # Adaptive Check
-        (self.wxobj.resamplingAdaptiveCheckBox, adaptiveSizer) = self.defineCheckBox(
-            resamplingPanel,
-            labelText="Adaptive Resampling (Faster)",
-            widgetCheck=False,
-            widgetSize=(-1, -1),
-            tooltipText="Dynamically stops permutations early if it is unlikely the ORF will be significant given the results so far. Improves performance, though p-value calculations for genes that are not differentially essential will be less accurate.",
-        )
-        resamplingSizer.Add(adaptiveSizer, 0, wx.EXPAND, 5)
+        (self.wxobj.resamplingAdaptiveCheckBox, adaptiveSizer) = self.defineCheckBox(resamplingPanel, labelText="Adaptive Resampling (Faster)", widgetCheck=True, widgetSize=(-1,-1), tooltipText="Dynamically stops permutations early if it is unlikely the ORF will be significant given the results so far. Improves performance, though p-value calculations for genes that are not differentially essential will be less accurate.")
+        resamplingSizer.Add( adaptiveSizer, 0, wx.EXPAND, 5 )
 
         # Histogram Check
-        (self.wxobj.resamplingHistogramCheckBox, histSizer) = self.defineCheckBox(
-            resamplingPanel,
-            labelText="Generate Resampling Histograms",
-            widgetCheck=False,
-            widgetSize=(-1, -1),
-            tooltipText="Creates .png images with the resampling histogram for each of the ORFs. Histogram images are created in a folder with the same name as the output file.",
-        )
-        resamplingSizer.Add(histSizer, 0, wx.EXPAND, 5)
+        (self.wxobj.resamplingHistogramCheckBox, histSizer) = self.defineCheckBox(resamplingPanel, labelText="Generate Resampling Histograms", widgetCheck=False, widgetSize=(-1,-1), tooltipText="Creates .png images with the resampling histogram for each of the ORFs. Histogram images are created in a folder with the same name as the output file.")
+        resamplingSizer.Add(histSizer, 0, wx.EXPAND, 5 )
 
         # Zeros Check
-        (self.wxobj.resamplingZeroCheckBox, zeroSizer) = self.defineCheckBox(
-            resamplingPanel,
-            labelText="Include sites with all zeros",
-            widgetCheck=True,
-            widgetSize=(-1, -1),
-            tooltipText="Includes sites that are empty (zero) across all datasets. Unchecking this may be useful for tn5 datasets, where all nucleotides are possible insertion sites and will have a large number of empty sites (significantly slowing down computation and affecting estimates).",
-        )
-        resamplingSizer.Add(zeroSizer, 0, wx.EXPAND, 5)
+        (self.wxobj.resamplingZeroCheckBox, zeroSizer) = self.defineCheckBox(resamplingPanel, labelText="Include sites with all zeros", widgetCheck=True, widgetSize=(-1,-1), tooltipText="Includes sites that are empty (zero) across all datasets. Unchecking this may be useful for tn5 datasets, where all nucleotides are possible insertion sites and will have a large number of empty sites (significantly slowing down computation and affecting estimates).")
+        resamplingSizer.Add(zeroSizer, 0, wx.EXPAND, 5 )
+
+        # site-restricted checkbox
+        (self.wxobj.siteRestrictedCheckBox, srSizer) = self.defineCheckBox(resamplingPanel, labelText="Site-restricted resampling", widgetCheck=True, widgetSize=(-1,-1), tooltipText="Restrict permutations of insertion counts in a gene to each individual TA site, which could be more sensitive (detect more conditional-essentials) than permuting counts over all TA sites pooled (which is the default).")
+        resamplingSizer.Add(srSizer, 0, wx.EXPAND, 5 )
+
+        # winsorization checkbox
+        (self.wxobj.winsorizeCheckBox, winzSizer) = self.defineCheckBox(resamplingPanel, labelText="Winsorize", widgetCheck=False, widgetSize=(-1,-1), tooltipText="Replace highest insertion count in each gene with second highest counts; this can help reduce the impact of noise (e.g. spurious outlier counts).")
+        resamplingSizer.Add(winzSizer, 0, wx.EXPAND, 5 )
+
 
         resamplingButton = wx.Button(
             resamplingPanel,
@@ -304,32 +268,27 @@ class ResamplingMethod(base.DualConditionMethod):
     resampling
 
     """
-
-    def __init__(
-        self,
-        ctrldata,
-        expdata,
-        annotation_path,
-        output_file,
-        normalization="TTR",
-        samples=10000,
-        adaptive=False,
-        doHistogram=False,
-        includeZeros=False,
-        pseudocount=1,
-        replicates="Sum",
-        LOESS=False,
-        ignoreCodon=True,
-        NTerminus=0.0,
-        CTerminus=0.0,
-        ctrl_lib_str="",
-        exp_lib_str="",
-        wxobj=None,
-        Z=False,
-        diffStrains=False,
-        annotation_path_exp="",
-        combinedWigParams=None,
-    ):
+    def __init__(self,
+                ctrldata,
+                expdata,
+                annotation_path,
+                output_file,
+                normalization="TTR",
+                samples=10000,
+                adaptive=False,
+                doHistogram=False,
+                includeZeros=False,
+                pseudocount=1,
+                replicates="Sum",
+                LOESS=False,
+                ignoreCodon=True,
+                NTerminus=0.0,
+                CTerminus=0.0,
+                ctrl_lib_str="",
+                exp_lib_str="",
+                winz = False,
+                site_restricted = False,
+                wxobj=None, Z = False, diffStrains = False, annotation_path_exp = "", combinedWigParams = None):
 
         base.DualConditionMethod.__init__(
             self,
@@ -362,6 +321,9 @@ class ResamplingMethod(base.DualConditionMethod):
             annotation_path_exp if diffStrains else annotation_path
         )
         self.combinedWigParams = combinedWigParams
+        self.winz = winz
+        self.site_restricted = site_restricted
+        self.transit_message("site_restricted=%s" % site_restricted)
 
     @classmethod
     def fromGUI(self, wxobj):
@@ -404,6 +366,8 @@ class ResamplingMethod(base.DualConditionMethod):
         doHistogram = wxobj.resamplingHistogramCheckBox.GetValue()
 
         includeZeros = wxobj.resamplingZeroCheckBox.GetValue()
+        site_restricted = wxobj.siteRestrictedCheckBox.GetValue()
+        winz = wxobj.winsorizeCheckBox.GetValue()
         pseudocount = float(wxobj.resamplingPseudocountText.GetValue())
         LOESS = wxobj.resamplingLoessCheck.GetValue()
 
@@ -426,29 +390,27 @@ class ResamplingMethod(base.DualConditionMethod):
             return None
         output_file = open(output_path, "w")
 
-        return self(
-            ctrldata,
-            expdata,
-            annotationPath,
-            output_file,
-            normalization,
-            samples,
-            adaptive,
-            doHistogram,
-            includeZeros,
-            pseudocount,
-            replicates,
-            LOESS,
-            ignoreCodon,
-            NTerminus,
-            CTerminus,
-            ctrl_lib_str,
-            exp_lib_str,
-            wxobj,
-            Z=False,
-            diffStrains=diffStrains,
-            annotation_path_exp=annotationPathExp,
-        )
+
+        return self(ctrldata,
+                expdata,
+                annotationPath,
+                output_file,
+                normalization,
+                samples,
+                adaptive,
+                doHistogram,
+                includeZeros,
+                pseudocount,
+                replicates,
+                LOESS,
+                ignoreCodon,
+                NTerminus,
+                CTerminus,
+                ctrl_lib_str,
+                exp_lib_str, 
+                winz = winz,
+                site_restricted = site_restricted,
+                wxobj=wxobj, Z = False, diffStrains = diffStrains, annotation_path_exp = annotationPathExp)
 
     @classmethod
     def fromargs(self, rawargs):
@@ -468,8 +430,9 @@ class ResamplingMethod(base.DualConditionMethod):
                 "conditions": [args[1].lower(), args[2].lower()],
             }
             annot_paths = args[3].split(",")
-            ctrldata = ""
-            expdata = ""
+            # to show contrasted conditions for combined_wigs in output header 
+            ctrldata = [combinedWigParams["conditions"][0]] 
+            expdata = [combinedWigParams["conditions"][1]]
             output_path = args[4]
         else:
             if len(args) != 4:
@@ -489,11 +452,12 @@ class ResamplingMethod(base.DualConditionMethod):
         if diffStrains and isCombinedWig:
             print("Error: Cannot have combined wig and different annotation files.")
             sys.exit(0)
+        winz = True if "winz" in kwargs else False
 
         output_file = open(output_path, "w")
 
         # check for unrecognized flags
-        flags = "-c -s -n -h -a -ez -PC -l -iN -iC --ctrl_lib --exp_lib -Z".split()
+        flags = "-c -s -n -h -a -ez -PC -l -iN -iC --ctrl_lib --exp_lib -Z -winz -sr".split()
         for arg in rawargs:
             if arg[0] == "-" and arg not in flags:
                 self.transit_error("flag unrecognized: %s" % arg)
@@ -507,9 +471,8 @@ class ResamplingMethod(base.DualConditionMethod):
         replicates = kwargs.get("r", "Sum")
         excludeZeros = kwargs.get("ez", False)
         includeZeros = not excludeZeros
-        pseudocount = float(
-            kwargs.get("PC", 1.0)
-        )  # use -PC (new semantics: for LFCs) instead of -pc (old semantics: fake counts)
+        site_restricted = kwargs.get("sr", False)
+        pseudocount = float(kwargs.get("PC", 1.0)) # use -PC (new semantics: for LFCs) instead of -pc (old semantics: fake counts)
 
         Z = True if "Z" in kwargs else False
 
@@ -521,29 +484,26 @@ class ResamplingMethod(base.DualConditionMethod):
         ctrl_lib_str = kwargs.get("-ctrl_lib", "")
         exp_lib_str = kwargs.get("-exp_lib", "")
 
-        return self(
-            ctrldata,
-            expdata,
-            annotationPath,
-            output_file,
-            normalization,
-            samples,
-            adaptive,
-            doHistogram,
-            includeZeros,
-            pseudocount,
-            replicates,
-            LOESS,
-            ignoreCodon,
-            NTerminus,
-            CTerminus,
-            ctrl_lib_str,
-            exp_lib_str,
-            Z=Z,
-            diffStrains=diffStrains,
-            annotation_path_exp=annotationPathExp,
-            combinedWigParams=combinedWigParams,
-        )
+        return self(ctrldata,
+                expdata,
+                annotationPath,
+                output_file,
+                normalization,
+                samples,
+                adaptive,
+                doHistogram,
+                includeZeros,
+                pseudocount,
+                replicates,
+                LOESS,
+                ignoreCodon,
+                NTerminus,
+                CTerminus,
+                ctrl_lib_str,
+                exp_lib_str, 
+                winz = winz,
+                site_restricted = site_restricted,
+                Z = Z, diffStrains = diffStrains, annotation_path_exp = annotationPathExp, combinedWigParams = combinedWigParams)
 
     def preprocess_data(self, position, data):
         (K, N) = data.shape
@@ -600,8 +560,12 @@ class ResamplingMethod(base.DualConditionMethod):
             print("Error: cannot do histograms")
             self.doHistogram = False
 
+        if self.ctrl_lib_str and self.site_restricted:
+          raise Exception("Cannot do site_restricted resampling with library strings at same time")
+
         self.transit_message("Starting resampling Method")
         start_time = time.time()
+        if self.winz: self.transit_message("Winsorizing insertion counts")
 
         histPath = ""
         if self.doHistogram:
@@ -748,121 +712,59 @@ class ResamplingMethod(base.DualConditionMethod):
             )
         else:
             self.output.write("#Console: python3 %s\n" % " ".join(sys.argv))
-        self.output.write(
-            "#Parameters: samples=%s, norm=%s, histograms=%s, adaptive=%s, excludeZeros=%s, pseudocounts=%s, LOESS=%s, trim_Nterm=%s, trim_Cterm=%s\n"
-            % (
-                self.samples,
-                self.normalization,
-                self.doHistogram,
-                self.adaptive,
-                not self.includeZeros,
-                self.pseudocount,
-                self.LOESS,
-                self.NTerminus,
-                self.CTerminus,
-            )
-        )
-        self.output.write(
-            "#Control Data: %s\n" % (",".join(self.ctrldata).encode("utf-8"))
-        )
-        self.output.write(
-            "#Experimental Data: %s\n" % (",".join(self.expdata).encode("utf-8"))
-        )
-        self.output.write(
-            "#Annotation path: %s %s\n"
-            % (
-                self.annotation_path.encode("utf-8"),
-                self.annotation_path_exp.encode("utf-8") if self.diffStrains else "",
-            )
-        )
-        self.output.write("#Time: %s\n" % (time.time() - start_time))
-        # Z = True # include Z-score column in resampling output?
-        global columns  # consider redefining columns above (for GUI)
-        if self.Z == True:
-            columns = [
-                "Orf",
-                "Name",
-                "Desc",
-                "Sites",
-                "Mean Ctrl",
-                "Mean Exp",
-                "log2FC",
-                "Sum Ctrl",
-                "Sum Exp",
-                "Delta Mean",
-                "p-value",
-                "Z-score",
-                "Adj. p-value",
-            ]
+        self.output.write("#Parameters: samples=%s, norm=%s, histograms=%s, adaptive=%s, excludeZeros=%s, pseudocounts=%s, LOESS=%s, trim_Nterm=%s, trim_Cterm=%s, site_restricted=%s, winsorize=%s\n" % (self.samples,self.normalization, self.doHistogram, self.adaptive,not self.includeZeros,self.pseudocount,self.LOESS,self.NTerminus,self.CTerminus,self.site_restricted,self.winz))
+        self.output.write("#Control Data: %s\n" % (",".join(self.ctrldata).encode('utf-8')))
+        self.output.write("#Experimental Data: %s\n" % (",".join(self.expdata).encode('utf-8')))
+        self.output.write("#Annotation path: %s %s\n" % (self.annotation_path.encode('utf-8'), self.annotation_path_exp.encode('utf-8') if self.diffStrains else ''))
+
+        nhits = len(list(filter(lambda x: x<0.05,qval)))
+        result_msg = "Number of significant conditionally essential genes (Padj<0.05): %s" % nhits
+        self.output.write("#%s\n" % result_msg)
+        self.transit_message(result_msg)
+
+        global columns # consider redefining columns above (for GUI)
+        #Z = True # include Z-score column in resampling output?
+        if self.Z==True: columns = ["Orf","Name","Desc","Sites","Mean Ctrl","Mean Exp","log2FC", "Sum Ctrl", "Sum Exp", "Delta Mean","p-value","Z-score","Adj. p-value"]
         self.output.write("#%s\n" % "\t".join(columns))
 
-        for i, row in enumerate(data):
-            (
-                orf,
-                name,
-                desc,
-                n,
-                mean1,
-                mean2,
-                sum1,
-                sum2,
-                test_obs,
-                log2FC,
-                pval_2tail,
-            ) = row
-            if self.Z == True:
-                p = pval_2tail / 2  # convert from 2-sided back to 1-sided
-                if p == 0:
-                    p = 1e-5  # or 1 level deeper the num of iterations of resampling, which is 1e-4=1/10000, by default
-                if p == 1:
-                    p = 1 - 1e-5
-                z = scipy.stats.norm.ppf(p)
-                if log2FC > 0:
-                    z *= -1
-                self.output.write(
-                    "%s\t%s\t%s\t%d\t%1.1f\t%1.1f\t%1.2f\t%1.1f\t%1.2f\t%1.1f\t%1.5f\t%0.2f\t%1.5f\n"
-                    % (
-                        orf,
-                        name,
-                        desc,
-                        n,
-                        mean1,
-                        mean2,
-                        log2FC,
-                        sum1,
-                        sum2,
-                        test_obs,
-                        pval_2tail,
-                        z,
-                        qval[i],
-                    )
-                )
-            else:
-                self.output.write(
-                    "%s\t%s\t%s\t%d\t%1.1f\t%1.1f\t%1.2f\t%1.1f\t%1.2f\t%1.1f\t%1.5f\t%1.5f\n"
-                    % (
-                        orf,
-                        name,
-                        desc,
-                        n,
-                        mean1,
-                        mean2,
-                        log2FC,
-                        sum1,
-                        sum2,
-                        test_obs,
-                        pval_2tail,
-                        qval[i],
-                    )
-                )
+        for i,row in enumerate(data):
+            (orf, name, desc, n, mean1, mean2, sum1, sum2, test_obs, log2FC, pval_2tail) = row
+            if self.Z==True:
+              p = pval_2tail/2 # convert from 2-sided back to 1-sided
+              if p==0: p = 1e-5 # or 1 level deeper the num of iterations of resampling, which is 1e-4=1/10000, by default
+              if p==1: p = 1-1e-5
+              z = scipy.stats.norm.ppf(p)
+              if log2FC>0: z *= -1
+              self.output.write("%s\t%s\t%s\t%d\t%1.1f\t%1.1f\t%1.2f\t%1.1f\t%1.2f\t%1.1f\t%1.5f\t%0.2f\t%1.5f\n" % (orf, name, desc, n, mean1, mean2, log2FC, sum1, sum2, test_obs, pval_2tail, z, qval[i]))
+            else: self.output.write("%s\t%s\t%s\t%d\t%1.1f\t%1.1f\t%1.2f\t%1.1f\t%1.2f\t%1.1f\t%1.5f\t%1.5f\n" % (orf, name, desc, n, mean1, mean2, log2FC, sum1, sum2, test_obs, pval_2tail, qval[i]))
+
         self.output.close()
 
-        self.transit_message("Adding File: %s" % (self.output.name))
-        self.add_file(filetype="Resampling")
+        if self.wxobj: # only need to do this in the GUI
+          self.transit_message("Adding File: %s" % (self.output.name)) 
+          self.add_file(filetype="Resampling")
+        self.transit_message("Time: %0.2fs" % (time.time() - start_time)) # maybe append time elapsed to the "Finished Resampling" message?
 
-    def run_resampling(
-        self, G_ctrl, G_exp=None, doLibraryResampling=False, histPath=""
-    ):
+    def winsorize_for_resampling(self, data):
+      # input is a 2D array of insertion counts for gene (not pre-flattened)
+      shp = data.shape
+      assert len(shp)==2, "winsorize_resampling() expected 2D numpy array"
+      counts = data.flatten().tolist()
+      if len(counts)<3: return data
+      s = sorted(counts,reverse=True)
+      if s[1]==0: return data # don't do anything if there is only 1 non-zero value
+      c2 = [s[1] if x==s[0] else x for x in counts]
+      return numpy.array(c2).reshape(shp)
+
+      # the old way of winsorizing...
+      #unique_counts = numpy.unique(counts)
+      #if (len(unique_counts) < 2): return counts
+      #else:
+      #  n, n_minus_1 = unique_counts[heapq.nlargest(2, range(len(unique_counts)), unique_counts.take)]
+      #  result = [[ n_minus_1 if count == n else count for count in wig] for wig in counts]
+      #  return numpy.array(result)
+
+    def run_resampling(self, G_ctrl, G_exp = None, doLibraryResampling = False, histPath = ""):
         data = []
         N = len(G_ctrl)
         count = 0
@@ -914,52 +816,16 @@ class ResamplingMethod(base.DualConditionMethod):
                     ii_ctrl = numpy.ones(gene.n) == 1
                     ii_exp = numpy.ones(gene_exp.n) == 1
 
-                # data1 = gene.reads[:,ii_ctrl].flatten() + self.pseudocount # we used to have an option to add pseudocounts to each observation, like this
-                data1 = gene.reads[:, ii_ctrl].flatten()
-                data2 = gene_exp.reads[:, ii_exp].flatten()
+                #data1 = gene.reads[:,ii_ctrl].flatten() + self.pseudocount # we used to have an option to add pseudocounts to each observation, like this
+                data1 = gene.reads[:,ii_ctrl]###.flatten() #TRI - do not flatten, as of 9/6/22
+                data2 = gene_exp.reads[:,ii_exp]###.flatten()
+                if self.winz: data1 = self.winsorize_for_resampling(data1); data2 = self.winsorize_for_resampling(data2)
 
                 if doLibraryResampling:
-                    (
-                        test_obs,
-                        mean1,
-                        mean2,
-                        log2FC,
-                        pval_ltail,
-                        pval_utail,
-                        pval_2tail,
-                        testlist,
-                    ) = stat_tools.resampling(
-                        data1,
-                        data2,
-                        S=self.samples,
-                        testFunc=stat_tools.F_mean_diff_dict,
-                        permFunc=stat_tools.F_shuffle_dict_libraries,
-                        adaptive=self.adaptive,
-                        lib_str1=self.ctrl_lib_str,
-                        lib_str2=self.exp_lib_str,
-                        PC=self.pseudocount,
-                    )
+                    (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail, testlist) =  stat_tools.resampling(data1, data2, S=self.samples, testFunc=stat_tools.F_mean_diff_dict, permFunc=stat_tools.F_shuffle_dict_libraries, adaptive=self.adaptive, lib_str1=self.ctrl_lib_str, lib_str2=self.exp_lib_str,PC=self.pseudocount,site_restricted=self.site_restricted)
                 else:
-                    (
-                        test_obs,
-                        mean1,
-                        mean2,
-                        log2FC,
-                        pval_ltail,
-                        pval_utail,
-                        pval_2tail,
-                        testlist,
-                    ) = stat_tools.resampling(
-                        data1,
-                        data2,
-                        S=self.samples,
-                        testFunc=stat_tools.F_mean_diff_flat,
-                        permFunc=stat_tools.F_shuffle_flat,
-                        adaptive=self.adaptive,
-                        lib_str1=self.ctrl_lib_str,
-                        lib_str2=self.exp_lib_str,
-                        PC=self.pseudocount,
-                    )
+                    (test_obs, mean1, mean2, log2FC, pval_ltail, pval_utail,  pval_2tail, testlist) =  stat_tools.resampling(data1, data2, S=self.samples, testFunc=stat_tools.F_mean_diff_flat, permFunc=stat_tools.F_shuffle_flat, adaptive=self.adaptive, lib_str1=self.ctrl_lib_str, lib_str2=self.exp_lib_str,PC=self.pseudocount,site_restricted=self.site_restricted)
+
 
             if self.doHistogram:
                 import matplotlib.pyplot as plt
@@ -1042,12 +908,13 @@ class ResamplingMethod(base.DualConditionMethod):
         --exp_lib       :=  String of letters representing library of experimental files in order
                             e.g. 'ABAB'. Default empty. Letters used must also be used in --ctrl_lib
                             If non-empty, resampling will limit permutations to within-libraries.
+        -winz           :=  winsorize insertion counts for each gene in each condition 
+                            (replace max cnt in each gene with 2nd highest; helps mitigate effect of outliers)
+        -sr             :=  site-restricted resampling; more sensitive, might find a few more significant conditionally essential genes"
+        """ % (sys.argv[0], sys.argv[0])
 
-        """ % (
-            sys.argv[0],
-            sys.argv[0],
-        )
-
+        # for docs:
+        # site-restricted resampling: counts are permuted among samples with each TA site, rather than permuting pooled counts; more sensitive, might find a few more significant conditionally essential genes"
 
 if __name__ == "__main__":
 

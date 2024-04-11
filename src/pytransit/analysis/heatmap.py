@@ -102,41 +102,61 @@ class HeatmapMethod(base.SingleConditionMethod):
 
     @classmethod
     def fromargs(self, rawargs): 
+        if not hasR:
+            print("Error: R and rpy2 (~= 3.0) required to run heatmap.")
+            print("After installing R, you can install rpy2 using the command \"pip install 'rpy2~=3.0'\"")
+            sys.exit(0)
+
+        (args, kwargs) = transit_tools.cleanargs(rawargs)
         if len(rawargs)<3: print(self.usage_string()); sys.exit(-1)
         self.filetype = None
-        if rawargs[0]=="-anova": self.filetype = "anova"
-        elif rawargs[0]=="-zinb": self.filetype = "zinb"
+        if kwargs.get("anova",False): self.filetype = "anova"
+        elif kwargs.get("zinb",False): self.filetype = "zinb"
         else: print(self.usage_string()); sys.exit(-1)
-        self.infile = rawargs[1]
-        self.outfile = rawargs[2]
+        self.infile = args[0]
+        self.outfile = args[1]
+        self.qval = float(kwargs.get("qval",0.05))
+        self.topk = int(kwargs.get("topk",-1))
+        self.low_mean_filter = int(kwargs.get("low_mean_filter",5)) # filter out genes with grandmean<5 by default
         return self(self.infile,outfile=self.outfile)
 
     def Run(self):
 
-        # assume first non-comment line is header; samples are 
+        if self.filetype!="anova" and self.filetype!="zinb":
+          print("filetype not recognized: %s" % self.filetype); sys.exit(-1)
+        
         headers = None
-        data,LFCs = [],[]
+        data,hits = [],[]
+        n = -1 # number of conditions
 
-        if self.filetype=="anova" or self.filetype=="zinb":
-          n = -1 # number of conditions
-          for line in open(self.infile):
-            w = line.rstrip().split('\t')
-            if line[0]=='#' or ('pval' in line and 'padj' in line): # check for 'pval' for backwards compatibility
-              headers = w; continue # keep last comment line as headers
-            if n==-1: 
-              # ANOVA header line has names of conditions, organized as 3+2*n+3 (2 groups (means, LFCs) X n conditions)
-              # ZINB header line has names of conditions, organized as 3+4*n+3 (4 groups X n conditions)
-              if self.filetype=="anova": n = int((len(w)-6)/2) 
-              elif self.filetype=="zinb": n = int((len(headers)-6)/4) 
-              headers = headers[3:3+n]
-              headers = [x.replace("Mean_","") for x in headers]
-            lfcs = [float(x) for x in w[3+n:3+n+n]] # take just the columns of means
+        for line in open(self.infile):
+          w = line.rstrip().split('\t')
+          if line[0]=='#' or ('pval' in line and 'padj' in line): # check for 'pval' for backwards compatibility
+            headers = w; continue # keep last comment line as headers
+          # assume first non-comment line is header
+          if n==-1: 
+            # ANOVA header line has names of conditions, organized as 3+2*n+3 (2 groups (means, LFCs) X n conditions)
+            # ZINB header line has names of conditions, organized as 3+4*n+3 (4 groups X n conditions)
+            if self.filetype=="anova": n = int((len(w)-8)/2) 
+            elif self.filetype=="zinb": n = int((len(headers)-6)/4) 
+            headers = headers[3:3+n]
+            headers = [x.replace("Mean_","") for x in headers]
+          else:
+            means = [float(x) for x in w[3:3+n]] # take just the columns of means
+            lfcs = [float(x) for x in w[3+n:3+n+n]] # take just the columns of LFCs
             qval = float(w[-2])
-            if qval<0.05: data.append(w); LFCs.append(lfcs)
-        else: print("filetype not recognized: %s" % self.filetype); sys.exit(-1)
-        print("heatmap based on %s genes" % len(LFCs))
+            data.append((w,means,lfcs,qval))
 
-        genenames = ["%s/%s" % (w[0],w[1]) for w in data]
+        data.sort(key=lambda x: x[-1])
+        hits,LFCs = [],[]
+        for k,(w,means,lfcs,qval) in enumerate(data):
+          if (self.topk==-1 and qval<self.qval) or (self.topk!=-1 and k<self.topk): 
+            mm = round(numpy.mean(means),1)
+            if mm<self.low_mean_filter: print("excluding %s/%s, mean(means)=%s" % (w[0],w[1],mm))
+            else: hits.append(w); LFCs.append(lfcs)
+
+        print("heatmap based on %s genes" % len(hits))
+        genenames = ["%s/%s" % (w[0],w[1]) for w in hits]
         hash = {}
         headers = [h.replace("Mean_","") for h in headers]
         for i,col in enumerate(headers): hash[col] = FloatVector([x[i] for x in LFCs])
@@ -158,8 +178,9 @@ H = 300+R*15
 
 png(outfilename,width=W,height=H)
 #defaults are lwid=lhei=c(1.5,4)
-heatmap.2(as.matrix(lfcs),col=colors,margin=c(12,12),lwid=c(2,6),lhei=c(0.1,2),trace="none",cexCol=1.4,cexRow=1.4,key=T) # make sure white=0
-heatmap.2(as.matrix(lfcs),col=colors,margin=c(12,12),lwid=c(2,6),lhei=c(0.1,2),trace="none",cexCol=1.4,cexRow=1.4,key=T) # make sure white=0
+#heatmap.2(as.matrix(lfcs),col=colors,margin=c(12,12),lwid=c(2,6),lhei=c(0.1,2),trace="none",cexCol=1.4,cexRow=1.4,key=T) # make sure white=0
+#heatmap.2(as.matrix(lfcs),col=colors,margin=c(12,12),trace="none",cexCol=1.2,cexRow=1.2,key=T) # make sure white=0 # setting margins was causing failures, so remove it 8/22/21
+heatmap.2(as.matrix(lfcs),col=colors,margin=c(12,12),trace="none",cexCol=1.2,cexRow=1.2,key=T) # actually, margins was OK, so the problem must have been with lhei and lwid
 dev.off()
 }
       ''')
@@ -167,8 +188,7 @@ dev.off()
 
     @classmethod
     def usage_string(self):
-        return "usage: python3 %s heatmap -anova|-zinb <anova_or_zinb_output> <heatmap.png>" % sys.argv[0]
-        # could add a flag for padj cutoff (or top n most signif genes)
+        return "usage: python3 %s heatmap <anova_or_zinb_output> <heatmap.png> -anova|-zinb [-topk <int>] [-qval <float>] [-low_mean_filter <int>]\n note: genes are selected based on qval<0.05 by default" % sys.argv[0]
 
 
 if __name__ == "__main__":
